@@ -1,11 +1,17 @@
 import { useState } from "react";
 import { api, ApiError } from "../api";
-import { VEHICLE_ICONS } from "../format";
+import { VEHICLE_ICONS, VEHICLE_TYPE_NAMES } from "../format";
 import { useParam } from "../router";
 import { useAsync } from "../useAsync";
 import { Loaded, Screen } from "../components/Screen";
 import { AsyncButton, Button, Card, Chip, Empty, Field, Sheet } from "../components/ui";
+import { useSuggestedName } from "../useSuggestedName";
 import type { Member, Vehicle } from "../types";
+
+type VehicleType = Vehicle["type"];
+
+// Ordered by how often a group needs them.
+const VEHICLE_TYPES: VehicleType[] = ["car", "van", "train", "bus", "other"];
 
 /** Who is driving, who is riding, and whether everyone has a seat. */
 export function Logistics() {
@@ -77,6 +83,7 @@ export function Logistics() {
       {adding && members.data && (
         <AddVehicleSheet
           tripId={tripId}
+          existing={vehicles.data ?? []}
           members={members.data.filter((m) => m.status === "active")}
           onClose={() => setAdding(false)}
           onCreated={() => {
@@ -143,16 +150,26 @@ function VehicleCard({
 
 function AddVehicleSheet({
   tripId,
+  existing,
   members,
   onClose,
   onCreated,
 }: {
   tripId: string;
+  existing: Vehicle[];
   members: Member[];
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [name, setName] = useState("");
+  const [type, setType] = useState<VehicleType>("car");
+  // "Car 1", then "Car 2": the number continues from what the trip already has,
+  // so adding a second car needs no typing either.
+  const suggestFor = (kind: VehicleType): string => {
+    const label = VEHICLE_TYPE_NAMES[kind];
+    if (!label) return "";
+    return `${label} ${existing.filter((v) => v.type === kind).length + 1}`;
+  };
+  const name = useSuggestedName(suggestFor("car"));
   const [capacity, setCapacity] = useState(4);
   const [driver, setDriver] = useState("");
   const [passengers, setPassengers] = useState<string[]>([]);
@@ -163,6 +180,11 @@ function AddVehicleSheet({
       current.includes(id) ? current.filter((p) => p !== id) : [...current, id],
     );
 
+  const chooseType = (next: VehicleType) => {
+    setType(next);
+    name.suggest(suggestFor(next));
+  };
+
   // The driver takes a seat, so the count shown here matches the server's rule.
   const taken = new Set(passengers.concat(driver ? [driver] : [])).size;
 
@@ -170,8 +192,8 @@ function AddVehicleSheet({
     setError(undefined);
     try {
       await api.vehicles.create(tripId, {
-        name,
-        type: "car",
+        name: name.value,
+        type,
         capacity,
         ...(driver ? { driver_member_id: driver } : {}),
         passenger_ids: passengers.filter((p) => p !== driver),
@@ -185,8 +207,18 @@ function AddVehicleSheet({
 
   return (
     <Sheet title="Add a vehicle" onClose={onClose}>
+      {/* Kind first, so the name below is usually already right. */}
+      <Field label="Kind">
+        <div className="row wrap">
+          {VEHICLE_TYPES.map((t) => (
+            <Chip key={t} active={type === t} onClick={() => chooseType(t)}>
+              {VEHICLE_ICONS[t]} {VEHICLE_TYPE_NAMES[t] || "Other"}
+            </Chip>
+          ))}
+        </div>
+      </Field>
       <Field label="Name" error={error?.fields.name}>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Car 1" autoFocus />
+        <input value={name.value} onChange={(e) => name.edit(e.target.value)} placeholder="Car 1" />
       </Field>
       <Field label="Seats (including the driver)" error={error?.fields.capacity}>
         <input
@@ -218,7 +250,7 @@ function AddVehicleSheet({
         </div>
       </Field>
       {error && <span className="field-error">{error.message}</span>}
-      <AsyncButton block onClick={submit} disabled={name.trim().length < 1 || taken > capacity}>
+      <AsyncButton block onClick={submit} disabled={name.value.trim().length < 1 || taken > capacity}>
         {taken > capacity ? "Too many people" : "Add vehicle"}
       </AsyncButton>
     </Sheet>

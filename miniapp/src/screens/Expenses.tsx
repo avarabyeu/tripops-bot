@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { api, ApiError } from "../api";
-import { CATEGORY_ICONS, dayIn, money, parseMoney } from "../format";
+import { CATEGORY_ICONS, CATEGORY_NAMES, dayIn, money, parseMoney } from "../format";
 import { useNavigation, useParam } from "../router";
 import { useAsync } from "../useAsync";
 import { Loaded, Screen } from "../components/Screen";
 import { AsyncButton, Button, Card, Chip, Empty, Field, Sheet } from "../components/ui";
+import { useSuggestedName } from "../useSuggestedName";
 import type { ExpenseCategory, Member } from "../types";
 
 const CATEGORIES: ExpenseCategory[] = [
@@ -115,25 +116,32 @@ function AddExpenseSheet({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<ExpenseCategory>("fuel");
+  // Picking a category names the expense; most are exactly "Fuel" or "Food".
+  const title = useSuggestedName(CATEGORY_NAMES.fuel ?? "");
   const [payer, setPayer] = useState(defaultPayer);
   const [participants, setParticipants] = useState<string[]>(members.map((m) => m.id));
   const [error, setError] = useState<ApiError | undefined>();
 
   const minor = parseMoney(amount);
-  const valid = title.trim().length > 0 && Number.isFinite(minor) && minor > 0 && participants.length > 0;
+  const valid =
+    title.value.trim().length > 0 && Number.isFinite(minor) && minor > 0 && participants.length > 0;
   const each = participants.length > 0 && Number.isFinite(minor) ? Math.floor(minor / participants.length) : 0;
 
   const toggle = (id: string) =>
     setParticipants((c) => (c.includes(id) ? c.filter((p) => p !== id) : [...c, id]));
 
+  const chooseCategory = (next: ExpenseCategory) => {
+    setCategory(next);
+    title.suggest(CATEGORY_NAMES[next] ?? "");
+  };
+
   const submit = async () => {
     setError(undefined);
     try {
       await api.expenses.create(tripId, {
-        title,
+        title: title.value,
         amount_minor: minor,
         category,
         paid_by: payer,
@@ -149,8 +157,18 @@ function AddExpenseSheet({
 
   return (
     <Sheet title="Add an expense" onClose={onClose}>
+      {/* Category first, so the name below is usually already filled in. */}
+      <Field label="Category">
+        <div className="row wrap">
+          {CATEGORIES.map((c) => (
+            <Chip key={c} active={category === c} onClick={() => chooseCategory(c)}>
+              {CATEGORY_ICONS[c]} {CATEGORY_NAMES[c] || "Other"}
+            </Chip>
+          ))}
+        </div>
+      </Field>
       <Field label="What for?" error={error?.fields.title}>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Fuel" autoFocus />
+        <input value={title.value} onChange={(e) => title.edit(e.target.value)} placeholder="Fuel" />
       </Field>
       <Field label={`How much (${currency})`} error={error?.fields.amount_minor}>
         <input
@@ -158,16 +176,8 @@ function AddExpenseSheet({
           onChange={(e) => setAmount(e.target.value)}
           inputMode="decimal"
           placeholder="120.00"
+          autoFocus
         />
-      </Field>
-      <Field label="Category">
-        <div className="row wrap">
-          {CATEGORIES.map((c) => (
-            <Chip key={c} active={category === c} onClick={() => setCategory(c)}>
-              {CATEGORY_ICONS[c]} {c}
-            </Chip>
-          ))}
-        </div>
       </Field>
       <Field label="Who paid?" error={error?.fields.paid_by}>
         <div className="row wrap">

@@ -96,6 +96,43 @@ export function initials(name: string): string {
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
 }
 
+/**
+ * Display names for the kinds a thing can have.
+ *
+ * They double as the suggested name when a kind is picked, so the chip and the
+ * filled-in field always read the same. A catch-all kind suggests nothing:
+ * "Other" is not a name for anything.
+ */
+export const EVENT_TYPE_NAMES: Record<string, string> = {
+  departure: "Departure",
+  arrival: "Arrival",
+  accommodation: "Check-in",
+  activity: "Activity",
+  meal: "Meal",
+  transport: "Transport",
+  race: "Race",
+  custom: "",
+};
+
+export const CATEGORY_NAMES: Record<string, string> = {
+  accommodation: "Accommodation",
+  transport: "Transport",
+  fuel: "Fuel",
+  food: "Food",
+  parking: "Parking",
+  registration: "Registration",
+  equipment: "Equipment",
+  other: "",
+};
+
+export const VEHICLE_TYPE_NAMES: Record<string, string> = {
+  car: "Car",
+  van: "Van",
+  train: "Train",
+  bus: "Bus",
+  other: "",
+};
+
 export const EVENT_ICONS: Record<string, string> = {
   departure: "🚗",
   arrival: "🏁",

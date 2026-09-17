@@ -1,22 +1,29 @@
 import { useState } from "react";
 import { api, ApiError } from "../api";
-import { dayIn, timeIn, EVENT_ICONS } from "../format";
+import { dayIn, timeIn, EVENT_ICONS, EVENT_TYPE_NAMES } from "../format";
 import { useParam } from "../router";
 import { useAsync } from "../useAsync";
 import { Loaded, Screen } from "../components/Screen";
 import { AsyncButton, Button, Card, Chip, Empty, Field, Sheet } from "../components/ui";
+import { useSuggestedName } from "../useSuggestedName";
 import type { EventType, Member, RSVP, TripEvent } from "../types";
 
-const TYPES: { value: EventType; label: string }[] = [
-  { value: "departure", label: "🚗 Departure" },
-  { value: "arrival", label: "🏁 Arrival" },
-  { value: "accommodation", label: "🏠 Check-in" },
-  { value: "meal", label: "🍝 Meal" },
-  { value: "race", label: "🚴 Race" },
-  { value: "activity", label: "🎯 Activity" },
-  { value: "transport", label: "🚌 Transport" },
-  { value: "custom", label: "📌 Other" },
+// Ordered by how often a trip needs them, not alphabetically.
+const TYPES: EventType[] = [
+  "departure",
+  "arrival",
+  "accommodation",
+  "meal",
+  "race",
+  "activity",
+  "transport",
+  "custom",
 ];
+
+/** The chip label; "Other" is the one kind with no name of its own. */
+function typeLabel(type: EventType): string {
+  return `${EVENT_ICONS[type]} ${EVENT_TYPE_NAMES[type] || "Other"}`;
+}
 
 export function Timeline() {
   const tripId = useParam("tripId");
@@ -173,17 +180,24 @@ function AddEventSheet({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [title, setTitle] = useState("");
   const [type, setType] = useState<EventType>("departure");
+  // Pre-filled from the type selected by default, and it follows every change
+  // until the field is edited.
+  const title = useSuggestedName(EVENT_TYPE_NAMES.departure ?? "");
   const [when, setWhen] = useState(defaultWhen());
   const [location, setLocation] = useState("");
   const [error, setError] = useState<ApiError | undefined>();
+
+  const chooseType = (next: EventType) => {
+    setType(next);
+    title.suggest(EVENT_TYPE_NAMES[next] ?? "");
+  };
 
   const submit = async () => {
     setError(undefined);
     try {
       await api.events.create(tripId, {
-        title,
+        title: title.value,
         type,
         // The picker gives a local wall-clock time; the API takes an instant.
         start_at: new Date(when).toISOString(),
@@ -198,17 +212,23 @@ function AddEventSheet({
 
   return (
     <Sheet title="Add to timeline" onClose={onClose}>
-      <Field label="What is happening?" error={error?.fields.title}>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Departure" autoFocus />
-      </Field>
+      {/* The kind comes first: picking it names the event, so the field below
+          is usually already right. */}
       <Field label="Kind">
         <div className="row wrap">
           {TYPES.map((t) => (
-            <Chip key={t.value} active={type === t.value} onClick={() => setType(t.value)}>
-              {t.label}
+            <Chip key={t} active={type === t} onClick={() => chooseType(t)}>
+              {typeLabel(t)}
             </Chip>
           ))}
         </div>
+      </Field>
+      <Field label="What is happening?" error={error?.fields.title}>
+        <input
+          value={title.value}
+          onChange={(e) => title.edit(e.target.value)}
+          placeholder="Departure"
+        />
       </Field>
       <Field label={`When (${timezone})`} error={error?.fields.start_at}>
         <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
@@ -218,7 +238,7 @@ function AddEventSheet({
       </Field>
       {error && !Object.keys(error.fields).length && <span className="field-error">{error.message}</span>}
       <p className="tiny">Everyone on the trip is added, undecided, and can answer for themselves.</p>
-      <AsyncButton block onClick={submit} disabled={title.trim().length < 2}>
+      <AsyncButton block onClick={submit} disabled={title.value.trim().length < 2}>
         Add event
       </AsyncButton>
     </Sheet>
