@@ -33,7 +33,7 @@ server: development defaults to a local SQLite file.
 
 ```bash
 git clone https://github.com/avarabyeu/tripops-bot.git && cd tripops-bot
-cp .env.example .env          # optional; only needed for the bot
+cp .env.example .env          # the defaults work; fill in the bot token later
 
 task run                      # backend on :8080, migrations applied
 task app:dev                  # Mini App on :5173, in another terminal
@@ -41,8 +41,13 @@ task test                     # the whole suite
 ```
 
 Open <http://localhost:5173>. Outside Telegram the app has no signed
-credentials, so set `DEV_USER_TELEGRAM_ID=1` in `.env` to browse as a test
-user. That shortcut is refused unless `APP_ENV=development`.
+credentials, so `.env` ships with `DEV_USER_TELEGRAM_ID=1`, which lets you
+browse as a test user. That shortcut is refused unless `APP_ENV=development`.
+
+`.env` is read by both `task` and Docker Compose, so local runs and containers
+see the same configuration. Only two values actually matter to get the bot
+working — `TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME`, both from
+[@BotFather](https://t.me/BotFather); everything else has a working default.
 
 `task` on its own lists everything.
 
@@ -85,18 +90,33 @@ SQLite · React 19 + Vite · Task.
 
 ## Configuration
 
-Everything is an environment variable; [`.env.example`](.env.example) documents
-each one. The essentials:
+Everything is an environment variable; [`.env.example`](.env.example) groups
+them by how much they matter and documents each one.
+
+**Required** — the app starts without them, but the product does not work:
+
+| Variable | Notes |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | from @BotFather; without it the API runs and the bot does not |
+| `TELEGRAM_BOT_USERNAME` | invite deep links are built from it, so invitations need it |
+
+**Required in production** (defaults cover development):
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `DATABASE_URL` | `sqlite://tripops.db` | or `postgres://user:pass@host:5432/db` |
-| `TELEGRAM_BOT_TOKEN` | — | from @BotFather; without it the API runs and the bot does not |
-| `TELEGRAM_BOT_USERNAME` | — | used to build invite deep links |
-| `TELEGRAM_BOT_MODE` | `polling` | `webhook` in production |
+| `APP_ENV` | `development` | `production` refuses every development shortcut |
+| `DATABASE_URL` | `sqlite://tripops.db` | must be set explicitly when `APP_ENV=production` |
 | `MINIAPP_URL` | — | public HTTPS URL of the Mini App |
-| `APP_ENV` | `development` | `production` disables every development shortcut |
-| `DEV_USER_TELEGRAM_ID` | — | development only; browse without Telegram |
+
+**Required for webhook mode** — `TELEGRAM_WEBHOOK_URL` and
+`TELEGRAM_WEBHOOK_SECRET`, when `TELEGRAM_BOT_MODE=webhook`.
+
+Everything else has a sensible default: `PORT`, `LOG_LEVEL`, `CORS_ORIGINS`,
+`DEFAULT_TIMEZONE`, `DEFAULT_CURRENCY`, the worker intervals, and the
+development-only `DEV_USER_TELEGRAM_ID`.
+
+Misconfiguration is reported all at once and refuses to start, rather than one
+restart at a time.
 
 ---
 

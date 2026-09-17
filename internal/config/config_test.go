@@ -1,14 +1,36 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
 )
 
+// isolateEnv runs the test against an empty environment.
+//
+// Everything is cleared rather than a list of known keys, because the list
+// would rot: a new setting would silently start reading the developer's own
+// .env, which `task` exports for every task. That is how these tests passed
+// under `go test` and failed under `task test`.
+func isolateEnv(t *testing.T) {
+	t.Helper()
+	saved := os.Environ()
+	os.Clearenv()
+	t.Cleanup(func() {
+		os.Clearenv()
+		for _, entry := range saved {
+			if key, value, ok := strings.Cut(entry, "="); ok {
+				_ = os.Setenv(key, value)
+			}
+		}
+	})
+}
+
 // Configuration is the one place a mistake is silent until production, so the
 // loader reports everything that is wrong at once and refuses to start.
 func TestLoadDefaults(t *testing.T) {
+	isolateEnv(t)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("an empty environment should be a valid development setup: %v", err)
@@ -22,6 +44,10 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.BotMode != "polling" {
 		t.Errorf("bot mode = %q; polling needs no public URL and is the right default", cfg.BotMode)
 	}
+	// A fresh checkout must run with no database server.
+	if cfg.DatabaseURL != "sqlite://tripops.db" {
+		t.Errorf("database URL = %q, want a local SQLite file", cfg.DatabaseURL)
+	}
 	if cfg.BotConfigured() {
 		t.Error("no token was set, so the bot must be reported as unconfigured")
 	}
@@ -31,6 +57,7 @@ func TestLoadDefaults(t *testing.T) {
 }
 
 func TestLoadReadsTheEnvironment(t *testing.T) {
+	isolateEnv(t)
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("PORT", "9000")
 	t.Setenv("DATABASE_URL", "postgres://u:p@db:5432/tripops")
@@ -100,6 +127,12 @@ func TestLoadRejectsBrokenConfigurations(t *testing.T) {
 			env:  map[string]string{"APP_ENV": "production"},
 			want: "TELEGRAM_BOT_TOKEN",
 		},
+		// Falling back to a local SQLite file in production would look like it
+		// worked and quietly serve an empty database.
+		"production without a database URL": {
+			env:  map[string]string{"APP_ENV": "production", "TELEGRAM_BOT_TOKEN": "123:ABC"},
+			want: "DATABASE_URL must be set explicitly",
+		},
 		// The development bypass accepts unsigned requests. Outside
 		// development that is an authentication hole, so it refuses to boot.
 		"development bypass in production": {
@@ -118,6 +151,7 @@ func TestLoadRejectsBrokenConfigurations(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
+			isolateEnv(t)
 			for k, v := range tc.env {
 				t.Setenv(k, v)
 			}
@@ -135,6 +169,7 @@ func TestLoadRejectsBrokenConfigurations(t *testing.T) {
 // Every problem is reported together; fixing them one restart at a time is
 // miserable.
 func TestLoadReportsEveryProblemAtOnce(t *testing.T) {
+	isolateEnv(t)
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("TELEGRAM_BOT_MODE", "webhook")
 	t.Setenv("DEFAULT_TIMEZONE", "Nowhere/Special")

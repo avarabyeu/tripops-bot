@@ -50,9 +50,11 @@ type Config struct {
 // listing everything that is wrong rather than failing on the first problem.
 func Load() (Config, error) {
 	c := Config{
-		Env:               envStr("APP_ENV", "development"),
-		Port:              envInt("PORT", 8080),
-		DatabaseURL:       envStr("DATABASE_URL", "postgres://tripops:tripops@localhost:5432/tripops?sslmode=disable"),
+		Env:  envStr("APP_ENV", "development"),
+		Port: envInt("PORT", 8080),
+		// SQLite by default so a fresh checkout runs with no database server.
+		// Production must say what it means to connect to; see below.
+		DatabaseURL:       envStr("DATABASE_URL", "sqlite://tripops.db"),
 		DatabaseMaxConn:   int32(envInt("DATABASE_MAX_CONNECTIONS", 10)),
 		BotToken:          envStr("TELEGRAM_BOT_TOKEN", ""),
 		BotMode:           envStr("TELEGRAM_BOT_MODE", "polling"),
@@ -73,6 +75,12 @@ func Load() (Config, error) {
 	var problems []string
 	if c.DatabaseURL == "" {
 		problems = append(problems, "DATABASE_URL is required")
+	}
+	// Falling back to a local SQLite file in production would look like it
+	// worked and quietly serve an empty database, so the default is
+	// development-only.
+	if _, set := os.LookupEnv("DATABASE_URL"); !set && c.Env != "development" {
+		problems = append(problems, "DATABASE_URL must be set explicitly outside development")
 	}
 	switch c.BotMode {
 	case "polling":

@@ -4,6 +4,11 @@
 # CI runs, so "it passes locally" means something.
 version: "3"
 
+# Local configuration. Everything in .env becomes an environment variable for
+# every task, which is what makes `task run` and `docker compose up` read the
+# same file. Docker Compose loads it on its own.
+dotenv: [".env"]
+
 includes:
   app:
     taskfile: ./miniapp/Taskfile.yml
@@ -14,8 +19,8 @@ vars:
   BINARY: bin/tripops
   PKG: ./...
   # A local SQLite file is the default target for every dev task: no container
-  # needed to run, migrate or test.
-  DEV_DATABASE_URL: '{{.DEV_DATABASE_URL | default "sqlite://tripops.db"}}'
+  # needed to run, migrate or test. DATABASE_URL from .env wins if it is set.
+  DEV_DATABASE_URL: '{{.DATABASE_URL | default "sqlite://tripops.db"}}'
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
 
