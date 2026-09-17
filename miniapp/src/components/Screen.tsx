@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { useNavigation } from "../router";
+import { haptic } from "../telegram";
 import type { AsyncState } from "../useAsync";
 import { ErrorState, Skeleton } from "./ui";
 
@@ -20,12 +22,31 @@ export function Screen({
   action?: ReactNode;
   children: ReactNode;
 }) {
+  const { pop, needsBackControl } = useNavigation();
+
   return (
     <div className="screen">
       <div className="screen-header">
-        <div>
-          <h1 className="screen-title">{title}</h1>
-          {subtitle && <p className="screen-subtitle">{subtitle}</p>}
+        <div className="screen-heading">
+          {/* Inside Telegram the client draws the back arrow itself, so this
+              appears only where it would otherwise be missing: a browser. */}
+          {needsBackControl && (
+            <button
+              type="button"
+              className="back-button"
+              aria-label="Back"
+              onClick={() => {
+                haptic.tap();
+                pop();
+              }}
+            >
+              ‹
+            </button>
+          )}
+          <div>
+            <h1 className="screen-title">{title}</h1>
+            {subtitle && <p className="screen-subtitle">{subtitle}</p>}
+          </div>
         </div>
         {action}
       </div>
