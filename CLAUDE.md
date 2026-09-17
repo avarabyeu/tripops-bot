@@ -1,0 +1,115 @@
+# TripOps — working notes for Claude Code
+
+A group trip coordinator that lives inside Telegram: a bot for quick actions
+and notifications, a Mini App for editing, one Go backend behind both.
+
+The product promise is that anyone can open the chat, tap the trip, and
+understand its whole state in ten seconds. Every technical decision below
+serves that.
+
+## Commands
+
+Use `task` (Taskfile.yml); it is what CI runs.
+
+```bash
+task                  # list everything
+task run              # backend against local SQLite (no Docker needed)
+task test             # full suite: unit + integration, on SQLite
+task check            # format check, lint, vet, tests, build — run before finishing
+task fmt              # gofumpt + import grouping, via golangci-lint
+task app:dev          # Mini App dev server on :5173
+task migrate:status   # schema version and pending migrations
+task migrate:new -- add_trip_notes    # scaffold a migration pair
+task docker:up        # PostgreSQL + backend + Mini App
+```
+
+Run `task test` against PostgreSQL too before changing anything in a
+repository: `task test:integration`.
+
+## Architecture in one paragraph
+
+A modular monolith. `internal/<module>/` holds one domain each — model, repo,
+service — and modules talk through Go services, never HTTP. `internal/api`
+(chi) and `internal/telegram` are adapters over the same services, which is the
+only thing keeping the bot and the Mini App from disagreeing about the rules.
+`cmd/tripops` is a urfave/cli app; `serve` runs the API, the bot, the reminder
+scheduler and the notification worker in one process.
+
+Read `docs/architecture.md` before making a structural change, and record any
+significant decision in `docs/product-decisions.md`.
+
+## Rules that are easy to break by accident
+
+**Authorization goes through `trips.Access`.** Every trip-scoped API route is
+mounted under the `tripAccess` middleware, which loads the trip and the
+caller's membership. Handlers call `access.RequireManage()` and friends. Never
+add a trip-scoped route outside that subrouter, and never check a role by hand
+in a handler.
+
+A non-member gets `not_found`, not `forbidden`. Confirming that a trip exists
+to someone who was not invited leaks more than it helps.
+
+**The database has to work on PostgreSQL and SQLite.** That is what lets the
+whole test suite run with no infrastructure. Repositories use GORM and stay
+inside the portable subset:
+
+- no `FILTER`, no array parameters, no `unnest`, no `jsonb` operators, no
+  advisory locks, no `SELECT … FOR UPDATE SKIP LOCKED`;
+- aggregate with `count(CASE WHEN … THEN 1 END)`, pass id lists as
+  `IN ?` with `core.IDStrings`, upsert with `clause.OnConflict`;
+- timestamps come from Go in UTC, never from `now()`.
+
+Migrations are plain SQL in `migrations/sql/`, run by golang-migrate, in one
+directory for both engines. A shipped migration is never edited — add a new
+one. The header of `000001_initial_schema.up.sql` lists the allowed types.
+
+**Money is integers.** `core.Money` is minor units. Splits go through
+`expenses.ComputeShares`, which guarantees the shares sum exactly to the total;
+balances depend on that. No floats, ever. `core.DistributeEqually` and
+`DistributeByWeight` handle the leftover cents.
+
+**Time.** Instants are `time.Time` in UTC; the trip's timezone is a separate
+column and conversion happens at the edges (`trip.Location()`). Calendar dates
+are `core.Date`, not timestamps: "23 September" means the same thing to
+everyone on the trip.
+
+Any instant accepted from a client goes through `core.UTC` / `core.UTCPtr`
+before it is stored. Skipping that does not fail loudly — it shifts the value
+by the caller's offset and makes range queries quietly miss, because both
+engines compare the instant as written.
+
+**Notifications go through the outbox.** Domain code calls
+`notify.Enqueue`; the Telegram worker delivers. Give every scheduled reminder a
+`notify.DedupeKey(...)` — that is what lets the scheduler re-evaluate its rules
+every minute without pinging anyone twice. Domain packages must not import
+`internal/telegram`.
+
+**The activity log must never fail an operation.** `activity.Log` swallows its
+error into the process log on purpose.
+
+## Testing
+
+Domain logic is tested without a database: permissions, splitting, settlement,
+capacity, progress, voting. `test/` holds the integration and end-to-end
+suites, which build a real application over a temporary database via
+`internal/testsupport`.
+
+Write the test alongside the logic. Anything arithmetic (splitting, balances,
+settlement) gets property-style coverage — the invariants are "shares sum to
+the total" and "transfers clear every balance".
+
+## Scope
+
+Out of scope for the MVP, deliberately: payment providers, booking APIs, live
+location, route planning, weather, AI planning, a social feed, anything
+multi-tenant. TripOps records that money moved; it never moves money. Do not
+add an abstraction for these — add it when there is a second implementation.
+
+## Style
+
+Boring, explicit Go. Hand-written SQL-ish GORM queries over clever generics.
+Comments explain *why*, never restate the code. Match the surrounding file.
+
+Formatting is `golangci-lint fmt` (gofumpt plus import grouping), not bare
+`gofmt` — one tool and one config for both formatting and linting. Run
+`task fmt` rather than reaching for `gofmt -w`.

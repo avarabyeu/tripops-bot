@@ -1,0 +1,69 @@
+# golangci-lint configuration.
+#
+# The set is deliberately small: linters that catch real defects, and none that
+# argue about style, since gofmt already settles that.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - errcheck      # an ignored error is the most common real bug
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose     # a leaked response body exhausts the connection pool
+    - rowserrcheck
+    - sqlclosecheck
+    - contextcheck  # a dropped context breaks shutdown and timeouts
+    - nilerr
+    - errorlint
+    - misspell
+    - unconvert
+    - wastedassign
+
+  settings:
+    errcheck:
+      # Activity logging and notification delivery deliberately swallow their
+      # errors; the reasons are documented at each call site.
+      exclude-functions:
+        - (*log/slog.Logger).Log
+    staticcheck:
+      checks:
+        - all
+        # Package comments on every file are noise in a package split across
+        # several files.
+        - -ST1000
+
+  exclusions:
+    rules:
+      # Tests may ignore errors from helpers whose failure the assertion catches.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - bodyclose
+
+# Formatting is golangci-lint's job, not a separate gofmt step: one tool, one
+# configuration, and `golangci-lint fmt` fixes exactly what `run` complains
+# about.
+formatters:
+  enable:
+    # gofumpt is gofmt plus the rules gofmt leaves to taste, so formatting
+    # stops being something to have an opinion about in review.
+    - gofumpt
+    # Import grouping: standard library, third party, then this module.
+    - goimports
+
+  settings:
+    gofumpt:
+      extra:
+        group-params: true
+    goimports:
+      local-prefixes:
+        - github.com/avarabyeu/tripops-bot
+
+  exclusions:
+    generated: lax

@@ -1,0 +1,75 @@
+# The PostgreSQL stack: what production runs.
+#
+#   docker compose -f docker-compose-pg.yml up --build
+#
+# Identical to the default stack except for the engine, which is the point:
+# the same schema and the same repositories serve both. Use this one to check
+# a change against the production engine before shipping it.
+#
+# Copy .env.example to .env and set TELEGRAM_BOT_TOKEN first.
+
+name: tripops-pg
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tripops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tripops}
+      POSTGRES_DB: ${POSTGRES_DB:-tripops}
+      # Deterministic collation, so ordering does not depend on the host.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tripops} -d ${POSTGRES_DB:-tripops}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-compose}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      PORT: "8080"
+      DATABASE_URL: postgres://${POSTGRES_USER:-tripops}:${POSTGRES_PASSWORD:-tripops}@postgres:5432/${POSTGRES_DB:-tripops}?sslmode=disable
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      TELEGRAM_BOT_MODE: ${TELEGRAM_BOT_MODE:-polling}
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      MINIAPP_URL: ${MINIAPP_URL:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}
+      DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-UTC}
+      DEFAULT_CURRENCY: ${DEFAULT_CURRENCY:-EUR}
+      DEV_USER_TELEGRAM_ID: ${DEV_USER_TELEGRAM_ID:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/tripops", "migrate", "status"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  miniapp:
+    build:
+      context: ./miniapp
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

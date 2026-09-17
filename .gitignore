@@ -1,0 +1,50 @@
+# ------------------------------------------------------------------- secrets --
+# Real configuration never goes in; .env.example documents every variable.
+.env
+.env.*
+!.env.example
+
+# --------------------------------------------------------------------- Go --
+/bin/
+*.exe
+*.test
+*.out
+coverage.html
+# Profiles from `go test -cpuprofile` and friends.
+*.prof
+# A local workspace file points the build at checkouts nobody else has.
+go.work
+go.work.sum
+
+# --------------------------------------------------------------- databases --
+# The local SQLite database and the sidecar files WAL mode creates next to it.
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ---------------------------------------------------------------- Mini App --
+node_modules/
+miniapp/dist/
+miniapp/.vite/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ----------------------------------------------------------------- tooling --
+# Task's checksum cache, used to skip up-to-date targets.
+.task/
+
+# Claude Code: the agent definitions and CLAUDE.md are shared with the team,
+# per-developer permissions are not.
+.claude/settings.local.json
+
+# --------------------------------------------------------- editors and OS --
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

@@ -1,0 +1,14 @@
+.git
+.github
+bin
+coverage.out
+*.db
+*.db-shm
+*.db-wal
+miniapp/node_modules
+miniapp/dist
+.env
+.env.local
+docs
+README.md
+CLAUDE.md

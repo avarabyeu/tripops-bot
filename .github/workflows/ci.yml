@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A superseded run has nothing left to say.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      # Formatting and linting come from the same tool and the same config, so
+      # "it passes locally" and "it passes in CI" cannot disagree.
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout 5m
+
+      - name: Check formatting
+        run: golangci-lint fmt --diff
+
+      - name: Test (SQLite)
+        run: go test -race -count=1 ./...
+
+      - name: Build
+        run: go build -trimpath -o bin/tripops ./cmd/tripops
+
+  postgres:
+    name: Integration (PostgreSQL)
+    runs-on: ubuntu-latest
+    # The suite runs on SQLite in the job above; this one proves the schema and
+    # every repository work on the engine production actually uses.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: tripops
+          POSTGRES_PASSWORD: tripops
+          POSTGRES_DB: tripops_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tripops -d tripops_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Integration tests
+        env:
+          TEST_DATABASE_URL: postgres://tripops:tripops@localhost:5432/tripops_test?sslmode=disable
+        run: go test -race -count=1 ./test/...
+
+  miniapp:
+    name: Mini App
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: miniapp
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: miniapp/package-lock.json
+
+      - run: npm ci
+
+      - name: Type-check and build
+        run: npm run build

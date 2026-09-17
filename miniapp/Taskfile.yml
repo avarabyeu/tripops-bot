@@ -1,0 +1,53 @@
+# Taskfile for the TripOps Mini App.
+#
+# Included by the root Taskfile under the `app:` namespace, so `task app:dev`
+# from the repository root does the right thing.
+version: "3"
+
+tasks:
+  install:
+    desc: Install dependencies
+    sources:
+      - package.json
+      - package-lock.json
+    generates:
+      - node_modules/.package-lock.json
+    cmds:
+      - npm install
+
+  dev:
+    desc: Run the Vite dev server (http://localhost:5173)
+    deps: [install]
+    cmds:
+      - npm run dev
+
+  build:
+    desc: Type-check and build the production bundle into dist/
+    deps: [install]
+    sources:
+      - src/**/*
+      - index.html
+      - package.json
+      - tsconfig.json
+      - vite.config.ts
+    generates:
+      - dist/**/*
+    cmds:
+      - npm run build
+
+  preview:
+    desc: Serve the production build locally
+    deps: [build]
+    cmds:
+      - npm run preview
+
+  typecheck:
+    desc: Type-check without emitting
+    deps: [install]
+    cmds:
+      - npm run typecheck
+
+  clean:
+    desc: Remove build output and dependencies
+    cmds:
+      - rm -rf dist node_modules

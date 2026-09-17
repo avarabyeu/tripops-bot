@@ -1,0 +1,558 @@
+/*
+ * TripOps Mini App styles.
+ *
+ * Telegram supplies the palette through CSS variables on the host document and
+ * changes them with the user's theme, so the app never defines its own colours
+ * beyond fallbacks. Everything is mobile-first: a single column, thumb-sized
+ * targets, no hover-only affordances.
+ */
+
+:root {
+  --bg: var(--tg-theme-bg-color, #ffffff);
+  --secondary-bg: var(--tg-theme-secondary-bg-color, #f2f2f7);
+  --text: var(--tg-theme-text-color, #000000);
+  --hint: var(--tg-theme-hint-color, #8e8e93);
+  --link: var(--tg-theme-link-color, #2481cc);
+  --accent: var(--tg-theme-button-color, #2481cc);
+  --accent-text: var(--tg-theme-button-text-color, #ffffff);
+  --destructive: var(--tg-theme-destructive-text-color, #e53935);
+  --section-bg: var(--tg-theme-section-bg-color, var(--bg));
+  --separator: color-mix(in srgb, var(--hint) 24%, transparent);
+
+  --warning: #d98324;
+  --critical: #e53935;
+  --success: #34a853;
+
+  --radius: 14px;
+  --gap: 12px;
+  --pad: 16px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  color-scheme: light dark;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--secondary-bg);
+  color: var(--text);
+  font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overscroll-behavior-y: none;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ------------------------------------------------------------ structure -- */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: var(--pad);
+  padding-bottom: calc(96px + var(--safe-bottom));
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.screen-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap);
+}
+
+.screen-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.screen-subtitle {
+  margin: 2px 0 0;
+  color: var(--hint);
+  font-size: 14px;
+}
+
+.section-label {
+  margin: 8px 2px -4px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--hint);
+}
+
+/* ---------------------------------------------------------------- cards -- */
+
+.card {
+  background: var(--section-bg);
+  border-radius: var(--radius);
+  padding: var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card.tight {
+  padding: 12px var(--pad);
+}
+
+.card.tappable {
+  cursor: pointer;
+  transition: transform 0.08s ease, opacity 0.08s ease;
+}
+
+.card.tappable:active {
+  transform: scale(0.99);
+  opacity: 0.85;
+}
+
+.card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.stack.tight {
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.row.wrap {
+  flex-wrap: wrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.divider {
+  height: 1px;
+  background: var(--separator);
+  margin: 2px 0;
+}
+
+/* ---------------------------------------------------------------- text -- */
+
+.title {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.muted {
+  color: var(--hint);
+  font-size: 14px;
+}
+
+.tiny {
+  color: var(--hint);
+  font-size: 12px;
+}
+
+.mono-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.strike {
+  text-decoration: line-through;
+  color: var(--hint);
+}
+
+.positive {
+  color: var(--success);
+}
+.negative {
+  color: var(--destructive);
+}
+
+/* -------------------------------------------------------------- controls -- */
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+.btn {
+  appearance: none;
+  border: 0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  background: var(--accent);
+  color: var(--accent-text);
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn:active {
+  opacity: 0.8;
+}
+
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn.secondary {
+  background: var(--secondary-bg);
+  color: var(--text);
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--link);
+  padding: 8px 10px;
+  min-height: 36px;
+}
+
+.btn.danger {
+  background: transparent;
+  color: var(--destructive);
+}
+
+.btn.block {
+  width: 100%;
+}
+
+.btn.small {
+  padding: 7px 12px;
+  min-height: 34px;
+  font-size: 14px;
+  border-radius: 9px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: var(--secondary-bg);
+  border: 1px solid transparent;
+  font-size: 14px;
+  cursor: pointer;
+  min-height: 34px;
+}
+
+.chip.active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field > label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--hint);
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--secondary-bg);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 12px;
+  width: 100%;
+  min-height: 44px;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.field-error {
+  color: var(--destructive);
+  font-size: 13px;
+}
+
+/* -------------------------------------------------------------- avatars -- */
+
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex: none;
+  object-fit: cover;
+}
+
+.avatar.small {
+  width: 26px;
+  height: 26px;
+  font-size: 11px;
+}
+
+/* -------------------------------------------------------------- progress -- */
+
+.progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--secondary-bg);
+  overflow: hidden;
+}
+
+.progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.25s ease;
+}
+
+/* ------------------------------------------------------------- attention -- */
+
+.attention {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px var(--pad);
+  border-radius: var(--radius);
+  background: var(--section-bg);
+  border-left: 3px solid var(--hint);
+}
+
+.attention.warning {
+  border-left-color: var(--warning);
+}
+.attention.critical {
+  border-left-color: var(--critical);
+}
+.attention.mine {
+  background: color-mix(in srgb, var(--accent) 8%, var(--section-bg));
+}
+
+/* ------------------------------------------------------------ menu grid -- */
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.menu-tile {
+  background: var(--section-bg);
+  border: 0;
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  text-align: left;
+  cursor: pointer;
+  min-height: 78px;
+}
+
+.menu-tile:active {
+  opacity: 0.8;
+}
+
+.menu-tile .emoji {
+  font-size: 20px;
+}
+
+.menu-tile .label {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.badge {
+  margin-left: auto;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------- timeline -- */
+
+.timeline-day {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--hint);
+  margin: 10px 2px 0;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.timeline-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--hint);
+  padding-top: 2px;
+}
+
+/* ---------------------------------------------------------------- sheet -- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.42);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 50;
+}
+
+.sheet {
+  background: var(--bg);
+  width: 100%;
+  max-width: 720px;
+  border-radius: 18px 18px 0 0;
+  padding: var(--pad);
+  padding-bottom: calc(var(--pad) + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  max-height: 88vh;
+  overflow-y: auto;
+  animation: sheet-in 0.18s ease-out;
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(16px);
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet,
+  .card.tappable,
+  .progress > span {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ----------------------------------------------------------- empty/error -- */
+
+.placeholder {
+  text-align: center;
+  padding: 36px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.placeholder .emoji {
+  font-size: 34px;
+}
+
+.placeholder h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.placeholder p {
+  margin: 0;
+  color: var(--hint);
+  font-size: 14px;
+  max-width: 34ch;
+}
+
+.placeholder ul {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--hint);
+  font-size: 14px;
+  text-align: left;
+}
+
+/* -------------------------------------------------------------- skeleton -- */
+
+.skeleton {
+  border-radius: var(--radius);
+  background: linear-gradient(
+    90deg,
+    var(--secondary-bg) 25%,
+    color-mix(in srgb, var(--hint) 12%, var(--secondary-bg)) 37%,
+    var(--secondary-bg) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.3s ease infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
+/* --------------------------------------------------------- bottom action -- */
+
+.bottom-action {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px var(--pad) calc(12px + var(--safe-bottom));
+  background: linear-gradient(to top, var(--secondary-bg) 70%, transparent);
+  display: flex;
+  justify-content: center;
+  z-index: 20;
+}
+
+.bottom-action .btn {
+  max-width: 720px;
+  width: 100%;
+}

@@ -1,0 +1,247 @@
+# Taskfile for TripOps — https://taskfile.dev
+#
+# `task` with no arguments lists everything. The tasks here are the same ones
+# CI runs, so "it passes locally" means something.
+version: "3"
+
+includes:
+  app:
+    taskfile: ./miniapp/Taskfile.yml
+    dir: ./miniapp
+    optional: true
+
+vars:
+  BINARY: bin/tripops
+  PKG: ./...
+  # A local SQLite file is the default target for every dev task: no container
+  # needed to run, migrate or test.
+  DEV_DATABASE_URL: '{{.DEV_DATABASE_URL | default "sqlite://tripops.db"}}'
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+
+env:
+  # Pure Go builds everywhere: the SQLite driver needs no C toolchain, and the
+  # resulting binary runs in a scratch container.
+  CGO_ENABLED: "0"
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  # ------------------------------------------------------------------ build --
+
+  build:
+    desc: Build the tripops binary into bin/
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+    generates:
+      - "{{.BINARY}}"
+    cmds:
+      - go build -trimpath -ldflags "-s -w -X github.com/avarabyeu/tripops-bot/internal/cli.version={{.VERSION}}" -o {{.BINARY}} ./cmd/tripops
+
+  run:
+    desc: Run the backend against the local SQLite database
+    deps: [build]
+    env:
+      DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+    cmds:
+      - ./{{.BINARY}} serve
+
+  dev:
+    desc: Run the backend and the Mini App dev server together
+    deps: [run, app:dev]
+
+  # -------------------------------------------------------------------- test --
+
+  test:
+    desc: Run the whole test suite (unit + integration, on SQLite)
+    cmds:
+      - go test -race -count=1 {{.PKG}}
+
+  test:unit:
+    desc: Run only the fast domain tests
+    cmds:
+      - go test -race -count=1 ./internal/...
+
+  test:integration:
+    desc: Run the integration suite against PostgreSQL (start it with `task docker:pg:up`)
+    env:
+      TEST_DATABASE_URL: '{{.TEST_DATABASE_URL | default "postgres://tripops:tripops@localhost:5432/tripops_test?sslmode=disable"}}'
+    cmds:
+      - go test -race -count=1 ./test/...
+
+  test:cover:
+    desc: Run tests and open the coverage report
+    cmds:
+      - go test -count=1 -coverprofile=coverage.out -covermode=atomic {{.PKG}}
+      - go tool cover -func=coverage.out | tail -1
+      - go tool cover -html=coverage.out
+
+  bench:
+    desc: Run benchmarks
+    cmds:
+      - go test -run '^$' -bench . -benchmem {{.PKG}}
+
+  # ----------------------------------------------------------------- quality --
+
+  fmt:
+    desc: Format the Go sources (gofumpt + import grouping, via golangci-lint)
+    cmds:
+      - golangci-lint fmt
+      - go mod tidy
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet {{.PKG}}
+
+  lint:
+    desc: Run golangci-lint (install it with `task tools`)
+    cmds:
+      - golangci-lint run
+
+  tools:
+    desc: Install the development tools
+    cmds:
+      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+
+  check:
+    desc: Everything CI runs — format check, vet, lint, tests, build
+    cmds:
+      - task: lint:optional
+      - task: vet
+      - task: test
+      - task: build
+
+  lint:optional:
+    desc: Format check and lint, if golangci-lint is installed
+    cmds:
+      - |
+        if command -v golangci-lint >/dev/null 2>&1; then
+          golangci-lint fmt --diff
+          golangci-lint run
+        else
+          echo "golangci-lint is not installed — skipping format check and lint."
+          echo "Install it with 'task tools'. CI always runs both."
+        fi
+    silent: true
+
+  fmt:check:
+    desc: Fail if anything is not formatted
+    cmds:
+      - golangci-lint fmt --diff
+
+  # -------------------------------------------------------------- migrations --
+
+  migrate:up:
+    desc: Apply pending migrations
+    deps: [build]
+    env:
+      DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+    cmds:
+      - ./{{.BINARY}} migrate up
+
+  migrate:status:
+    desc: Show the schema version and what is pending
+    deps: [build]
+    env:
+      DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+    cmds:
+      - ./{{.BINARY}} migrate status
+
+  migrate:down:
+    desc: Roll back the last migration (drops data)
+    deps: [build]
+    env:
+      DATABASE_URL: "{{.DEV_DATABASE_URL}}"
+    cmds:
+      - ./{{.BINARY}} migrate down --yes --steps 1
+
+  migrate:new:
+    desc: Create a new migration pair — task migrate:new -- add_trip_notes
+    cmds:
+      - |
+        name='{{.CLI_ARGS}}'
+        if [ -z "$name" ]; then echo "usage: task migrate:new -- add_trip_notes"; exit 1; fi
+        next=$(printf '%06d' $(( $(ls migrations/sql/*.up.sql 2>/dev/null | wc -l | tr -d ' ') + 1 )))
+        for direction in up down; do
+          file="migrations/sql/${next}_${name}.${direction}.sql"
+          printf -- "-- %s_%s (%s)\n\n" "$next" "$name" "$direction" > "$file"
+          echo "created $file"
+        done
+    silent: true
+
+  db:reset:
+    desc: Delete the local SQLite database and migrate from scratch
+    cmds:
+      - rm -f tripops.db tripops.db-shm tripops.db-wal
+      - task: migrate:up
+
+  # ------------------------------------------------------------------ docker --
+
+  docker:up:
+    desc: Start the default stack (backend on SQLite + Mini App)
+    cmds:
+      - docker compose up --build -d
+      - docker compose ps
+
+  docker:down:
+    desc: Stop the default stack
+    cmds:
+      - docker compose down
+
+  docker:logs:
+    desc: Follow the backend logs of the default stack
+    cmds:
+      - docker compose logs -f backend
+
+  docker:pg:up:
+    desc: Start the PostgreSQL stack (what production runs)
+    cmds:
+      - docker compose -f docker-compose-pg.yml up --build -d
+      - docker compose -f docker-compose-pg.yml ps
+
+  docker:pg:down:
+    desc: Stop the PostgreSQL stack
+    cmds:
+      - docker compose -f docker-compose-pg.yml down
+
+  docker:pg:logs:
+    desc: Follow the backend logs of the PostgreSQL stack
+    cmds:
+      - docker compose -f docker-compose-pg.yml logs -f backend
+
+  docker:pg:psql:
+    desc: Open a psql shell on the PostgreSQL stack
+    cmds:
+      - docker compose -f docker-compose-pg.yml exec postgres psql -U tripops -d tripops
+
+  # --------------------------------------------------------------- telegram --
+
+  bot:info:
+    desc: Show which bot account TELEGRAM_BOT_TOKEN belongs to
+    deps: [build]
+    cmds:
+      - ./{{.BINARY}} bot info
+
+  bot:webhook:
+    desc: Point Telegram at this deployment
+    deps: [build]
+    cmds:
+      - ./{{.BINARY}} bot set-webhook
+
+  bot:polling:
+    desc: Drop the webhook so long polling works again
+    deps: [build]
+    cmds:
+      - ./{{.BINARY}} bot delete-webhook
+
+  clean:
+    desc: Remove build output and local databases
+    cmds:
+      - rm -rf bin coverage.out tripops.db tripops.db-shm tripops.db-wal
