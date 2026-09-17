@@ -1,0 +1,69 @@
+# Deployment overlay — copy to docker-compose.deploy.yml and edit.
+#
+#   cp docker-compose.deploy.yml.example docker-compose.deploy.yml
+#   cp .env.example .env.production          # then fill it in
+#   task deploy:up
+#
+# The copy is gitignored, and so is .env.production: your domain, your webhook
+# secret and your database password stay on the host. Nothing in the repository
+# names a deployment.
+#
+# This layers on docker-compose-pg.yml and publishes the stack through an
+# existing Traefik, which already terminates TLS and redirects http to https.
+# Traefik runs with exposedbydefault=false, so a container is routed only if it
+# says so itself — that is what the labels below are.
+#
+# Only the Mini App is exposed. It serves the app and proxies /api and
+# /telegram to the backend over the private network, so the browser and
+# Telegram see one origin and the backend never joins the shared network.
+
+# The deployed stack gets a name of its own, so its volumes and containers are
+# not tangled with the local PostgreSQL stack's.
+name: tripops
+
+services:
+  miniapp:
+    # Traefik reaches it over the shared network; nothing is published on the
+    # host. `!override` replaces the base file's list rather than appending.
+    ports: !override []
+    networks:
+      - default
+      - edge
+    labels:
+      traefik.enable: "true"
+      # The container is on two networks, so Traefik is told which address to
+      # use rather than left to pick.
+      traefik.docker.network: ${TRAEFIK_NETWORK:?set TRAEFIK_NETWORK in .env.production}
+
+      traefik.http.routers.tripops.rule: Host(`${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN in .env.production}`)
+      traefik.http.routers.tripops.entrypoints: ${TRAEFIK_ENTRYPOINT:-https}
+      traefik.http.routers.tripops.tls: "true"
+      # ACME resolver configured on the Traefik side; it issues and renews.
+      traefik.http.routers.tripops.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-default}
+
+      # nginx listens on 80 inside the container.
+      traefik.http.services.tripops.loadbalancer.server.port: "80"
+
+  backend:
+    ports: !override []
+    environment:
+      APP_ENV: production
+      # Telegram delivers updates to the public URL; the secret it echoes back
+      # is what proves an update came from Telegram.
+      TELEGRAM_BOT_MODE: webhook
+      TELEGRAM_WEBHOOK_URL: https://${PUBLIC_DOMAIN}
+      MINIAPP_URL: https://${PUBLIC_DOMAIN}
+      # Same origin as the Mini App, so the browser sends no preflight.
+      CORS_ORIGINS: https://${PUBLIC_DOMAIN}
+
+  postgres:
+    # Reachable from the other containers and from nowhere else.
+    # `task deploy:psql` opens a shell on it.
+    ports: !override []
+
+networks:
+  # The network the existing Traefik is on. Created by whatever installed
+  # Traefik, so this stack joins it rather than declaring it.
+  edge:
+    external: true
+    name: ${TRAEFIK_NETWORK}

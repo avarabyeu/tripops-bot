@@ -243,6 +243,49 @@ task build                                    # ./bin/tripops
 
 `GET /healthz` says the process is up; `GET /readyz` says the database answers.
 
+### On your own domain
+
+Telegram needs a public HTTPS URL for both the Mini App and the webhook. The
+mechanism is in the repository; the domain is not.
+
+```bash
+cp docker-compose.deploy.yml.example docker-compose.deploy.yml
+cp .env.example .env.production
+# set PUBLIC_DOMAIN, TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME and a password
+task deploy:up
+task deploy:webhook        # point Telegram at it
+```
+
+Both files are gitignored, so your domain, webhook secret, database password
+and deployment target stay on the host: nothing in the repository names a
+deployment.
+
+The overlay layers on `docker-compose-pg.yml` and publishes the stack through
+an **existing Traefik**, using labels rather than a proxy of its own. Set these
+in `.env.production` to match your installation:
+
+| Variable | What it is |
+| --- | --- |
+| `PUBLIC_DOMAIN` | the host the router matches on |
+| `TRAEFIK_NETWORK` | the Docker network Traefik watches; the stack joins it |
+| `TRAEFIK_ENTRYPOINT` | the entrypoint that terminates TLS (often `https` or `websecure`) |
+| `TRAEFIK_CERTRESOLVER` | the ACME resolver Traefik was configured with |
+| `DEPLOY_CONTEXT` | the Docker context to deploy to; empty means the current one |
+
+Read the first three off the running proxy rather than guessing:
+
+```bash
+docker --context <ctx> inspect <traefik-container> --format '{{json .Config.Cmd}}'
+```
+
+**Only the Mini App is exposed.** It serves the app and proxies `/api` and
+`/telegram` to the backend over the private network, so the browser and
+Telegram see one origin, no preflight is needed, and the backend and database
+never join the shared network. Nothing is published on the host.
+
+Finally, tell @BotFather about it: `/setmenubutton` → your bot → the same
+HTTPS URL.
+
 ---
 
 ## Development

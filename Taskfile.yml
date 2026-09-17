@@ -23,6 +23,11 @@ vars:
   DEV_DATABASE_URL: '{{.DATABASE_URL | default "sqlite://tripops.db"}}'
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  # The public stack: the PostgreSQL compose file plus the untracked overlay
+  # that adds the domain and the proxy labels. DEPLOY_CONTEXT comes from
+  # .env.production, so which machine this deploys to is not in the repository;
+  # empty means the current Docker context.
+  DEPLOY: docker ${DEPLOY_CONTEXT:+--context "$DEPLOY_CONTEXT"} compose -f docker-compose-pg.yml -f docker-compose.deploy.yml --env-file .env.production
 
 env:
   # Pure Go builds everywhere: the SQLite driver needs no C toolchain, and the
@@ -225,6 +230,52 @@ tasks:
     desc: Open a psql shell on the PostgreSQL stack
     cmds:
       - docker compose -f docker-compose-pg.yml exec postgres psql -U tripops -d tripops
+
+  # -------------------------------------------------------------- deployment --
+  # These read docker-compose.deploy.yml and .env.production, neither of which
+  # is in the repository: see docker-compose.deploy.yml.example.
+
+  deploy:up:
+    dotenv: [".env.production"]
+    desc: Start the public stack (PostgreSQL + backend + Mini App behind Traefik)
+    preconditions:
+      - sh: test -f docker-compose.deploy.yml
+        msg: "docker-compose.deploy.yml is missing — copy docker-compose.deploy.yml.example and edit it"
+      - sh: test -f .env.production
+        msg: ".env.production is missing — copy .env.example and fill it in"
+    cmds:
+      - "{{.DEPLOY}} up --build -d"
+      - "{{.DEPLOY}} ps"
+
+  deploy:down:
+    dotenv: [".env.production"]
+    desc: Stop the public stack
+    cmds:
+      - "{{.DEPLOY}} down"
+
+  deploy:logs:
+    dotenv: [".env.production"]
+    desc: Follow the public stack's backend logs
+    cmds:
+      - "{{.DEPLOY}} logs -f backend"
+
+  deploy:psql:
+    dotenv: [".env.production"]
+    desc: Open a psql shell on the deployed database
+    cmds:
+      - "{{.DEPLOY}} exec postgres psql -U tripops -d tripops"
+
+  deploy:webhook:
+    dotenv: [".env.production"]
+    desc: Point Telegram at the deployed backend
+    cmds:
+      - "{{.DEPLOY}} exec backend /usr/local/bin/tripops bot set-webhook"
+
+  deploy:ps:
+    dotenv: [".env.production"]
+    desc: Show the deployed stack
+    cmds:
+      - "{{.DEPLOY}} ps"
 
   # --------------------------------------------------------------- telegram --
 

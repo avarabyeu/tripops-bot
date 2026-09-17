@@ -32,6 +32,13 @@ npm-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# -------------------------------------------------------------- deployment --
+# A deployment names a domain, a webhook secret and a database password. The
+# mechanism is committed as docker-compose.deploy.yml.example; the filled-in
+# copy is not. (.env.production and friends are already covered above.)
+docker-compose.deploy.yml
+docker-compose.override.yml
+
 # ----------------------------------------------------------------- tooling --
 # Task's checksum cache, used to skip up-to-date targets.
 .task/
