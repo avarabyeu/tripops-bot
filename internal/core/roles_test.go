@@ -51,10 +51,14 @@ func TestTripStatusWritable(t *testing.T) {
 }
 
 func TestMemberStatusValid(t *testing.T) {
-	if !MemberActive.Valid() || !MemberInvited.Valid() || !MemberDeclined.Valid() || !MemberRemoved.Valid() {
+	if !MemberActive.Valid() || !MemberDeclined.Valid() || !MemberRemoved.Valid() {
 		t.Error("all known member statuses must validate")
 	}
 	if MemberStatus("lurking").Valid() {
 		t.Error("unknown statuses must not validate")
+	}
+	// Joining is link-based: there is no state between invited and on the trip.
+	if MemberStatus("invited").Valid() {
+		t.Error("the invited status was removed and must not validate")
 	}
 }

@@ -131,6 +131,30 @@ seconds on an arm64 laptop for an amd64 server, against minutes under QEMU.
 `task docker:up` builds the same tags for the developer's own machine and would
 otherwise quietly ship an image the server cannot execute.
 
+## A trip is visible to its members, and to nobody else
+
+Membership is a row in `trip_members`, and there are exactly two ways to get
+one: create the trip, or tap an invite link. A non-member gets **404, not
+403** — trip ids are not secret, but confirming that one exists to somebody
+who was not invited leaks more than it helps.
+
+**Chats grant nothing.** The bot ignores every non-private chat and there is no
+chat↔trip relationship in the schema; a group is simply where somebody pastes
+an invite link. Binding visibility to a chat was considered and declined: it
+would mean a chat↔trip link plus a live `getChatMember` call on every request,
+to replace something an invite link already does in one tap.
+
+There is no "invited" state. Both paths create an *active* member, so a person
+does not exist on a trip until they join — which meant the status was never
+written, the "has not joined yet" attention rule could never fire, and the
+dashboard's pending counter was permanently zero. The model now says what the
+code does, and the People card is a plain count rather than "5 / 6 confirmed":
+with link-based joining there is no second number.
+
+The database CHECK still permits the old value. Tightening it would mean
+rebuilding the table on SQLite, which has no `DROP CONSTRAINT` and eight
+foreign keys pointing at it, to forbid something nothing writes.
+
 ## Production runs SQLite too
 
 Not just development. One backend process, a trip being a handful of people, a

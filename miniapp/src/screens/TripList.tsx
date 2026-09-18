@@ -73,10 +73,7 @@ function TripRow({ trip, onOpen }: { trip: TripSummary; onOpen: () => void }) {
         </div>
         {trip.open_decisions > 0 && <span className="badge">{trip.open_decisions} 🗳</span>}
       </div>
-      <div className="muted">
-        {trip.member_count} going
-        {trip.pending_count > 0 && ` · ${trip.pending_count} invited`}
-      </div>
+      <div className="muted">{trip.member_count} going</div>
     </Card>
   );
 }

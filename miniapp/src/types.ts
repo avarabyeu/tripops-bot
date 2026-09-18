@@ -18,7 +18,6 @@ export interface Trip {
 export interface TripSummary extends Trip {
   role: Role;
   member_count: number;
-  pending_count: number;
   open_decisions: number;
 }
 
@@ -27,7 +26,7 @@ export interface Member {
   user_id: string;
   display_name: string;
   role: Role;
-  status: "invited" | "active" | "declined" | "removed";
+  status: "active" | "declined" | "removed";
   username?: string;
   photo_url?: string;
 }
@@ -209,7 +208,7 @@ export interface AttentionItem {
 export interface Dashboard {
   trip: Trip;
   me: Member;
-  people: { active: number; invited: number; total: number };
+  people: { active: number };
   transport: { vehicles: number; seats: number; seats_used: number; unseated: number };
   accommodation: { places: number; confirmed: number; total: number };
   next_event?: TripEvent;

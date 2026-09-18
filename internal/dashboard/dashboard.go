@@ -21,11 +21,10 @@ import (
 	"github.com/avarabyeu/tripops-bot/internal/trips"
 )
 
-// People is the "5 / 6 confirmed" block.
+// People is the group size. One number: joining is link-based, so everyone on
+// the trip has joined.
 type People struct {
-	Active  int `json:"active"`
-	Invited int `json:"invited"`
-	Total   int `json:"total"`
+	Active int `json:"active"`
 }
 
 // Transport is the vehicle summary.
@@ -109,7 +108,7 @@ func (s *Service) Build(ctx context.Context, access trips.Access) (View, error) 
 	}
 
 	if counts, err := s.src.Trips.MemberCounts(ctx, access.Trip.ID); err == nil {
-		view.People = People{Active: counts.Active, Invited: counts.Invited, Total: counts.Total}
+		view.People = People{Active: counts.Active}
 	}
 
 	if vehicles, err := s.src.Vehicles.ListByTrip(ctx, access.Trip.ID); err == nil {

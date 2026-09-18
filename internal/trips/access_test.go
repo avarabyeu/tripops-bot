@@ -55,13 +55,19 @@ func TestRequireWriteRejectsArchivedTrips(t *testing.T) {
 	}
 }
 
-// Somebody who was invited but never joined can look, not touch.
-func TestRequireWriteRejectsInvitedMembers(t *testing.T) {
-	access := accessFor(core.RoleMember, core.MemberInvited, core.TripPlanning)
-	if err := access.RequireWrite(); err == nil {
-		t.Fatal("an invited-but-not-joined member must not write")
-	} else if core.CodeOf(err) != core.CodeForbidden {
-		t.Errorf("code = %s, want forbidden", core.CodeOf(err))
+// Anyone whose membership is not active can look, not touch. Access already
+// turns declined and removed into a 404, so this is the second line of
+// defence rather than the first.
+func TestRequireWriteRejectsInactiveMembers(t *testing.T) {
+	for _, status := range []core.MemberStatus{core.MemberDeclined, core.MemberRemoved} {
+		access := accessFor(core.RoleMember, status, core.TripPlanning)
+		err := access.RequireWrite()
+		if err == nil {
+			t.Fatalf("a %s member must not write", status)
+		}
+		if core.CodeOf(err) != core.CodeForbidden {
+			t.Errorf("%s: code = %s, want forbidden", status, core.CodeOf(err))
+		}
 	}
 }
 

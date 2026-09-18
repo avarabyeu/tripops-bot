@@ -48,7 +48,6 @@ func (s Severity) rank() int {
 type Type string
 
 const (
-	TypeMemberNotJoined       Type = "member_not_joined"
 	TypeEventUndecided        Type = "event_undecided"
 	TypeDecisionVotePending   Type = "decision_vote_pending"
 	TypeDecisionClosingSoon   Type = "decision_closing_soon"
@@ -117,20 +116,6 @@ func (e *Engine) Evaluate(ctx context.Context, access trips.Access) []Item {
 	now := e.now()
 	items := []Item{}
 	add := func(i Item) { items = append(items, i) }
-
-	members, err := e.src.Trips.Members(ctx, access)
-	if err == nil {
-		for _, m := range members {
-			if m.Status == core.MemberInvited {
-				add(Item{
-					Type: TypeMemberNotJoined, Severity: SeverityInfo,
-					Title:       m.DisplayName + " has not joined yet",
-					Description: "They were invited but have not opened the trip.",
-					Target:      Target{Kind: "member", ID: m.ID},
-				})
-			}
-		}
-	}
 
 	e.eventRules(ctx, access, now, add)
 	e.decisionRules(ctx, access, now, add)

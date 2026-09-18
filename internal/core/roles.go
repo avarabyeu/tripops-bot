@@ -19,10 +19,15 @@ func (r Role) Valid() bool { _, ok := roleRank[r]; return ok }
 func (r Role) AtLeast(min Role) bool { return roleRank[r] >= roleRank[min] }
 
 // MemberStatus is the lifecycle of a participant's membership.
+//
+// There is no "invited": joining is link-based, so a person does not exist on
+// a trip until they tap the link and land here as active. The database CHECK
+// still permits the old value — tightening it would mean rebuilding the table
+// on SQLite, which has no DROP CONSTRAINT and eight foreign keys pointing at
+// it, to forbid something nothing writes.
 type MemberStatus string
 
 const (
-	MemberInvited  MemberStatus = "invited"
 	MemberActive   MemberStatus = "active"
 	MemberDeclined MemberStatus = "declined"
 	MemberRemoved  MemberStatus = "removed"
@@ -30,7 +35,7 @@ const (
 
 func (s MemberStatus) Valid() bool {
 	switch s {
-	case MemberInvited, MemberActive, MemberDeclined, MemberRemoved:
+	case MemberActive, MemberDeclined, MemberRemoved:
 		return true
 	}
 	return false

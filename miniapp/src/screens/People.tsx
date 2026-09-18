@@ -18,7 +18,8 @@ export function People() {
     [tripId, canManage],
   );
 
-  const active = members.data?.filter((m) => m.status === "active").length ?? 0;
+  // Everyone listed has joined: that is the only way onto a trip.
+  const going = members.data?.length ?? 0;
   const link = invites.data?.[0]?.url;
 
   const inviteSomeone = async () => {
@@ -32,7 +33,7 @@ export function People() {
   };
 
   return (
-    <Screen title="People" subtitle={members.data ? `${active} going` : undefined}>
+    <Screen title="People" subtitle={members.data ? `${going} going` : undefined}>
       <Loaded state={members}>
         {(list) =>
           list.length === 0 ? (
@@ -47,11 +48,9 @@ export function People() {
                       <div className="title">{member.display_name}</div>
                       <div className="tiny">
                         {member.role !== "member" && `${member.role} · `}
-                        {member.status === "active" ? "joined" : member.status}
-                        {member.username && ` · @${member.username}`}
+                        {member.username ? `@${member.username}` : "joined"}
                       </div>
                     </div>
-                    {member.status !== "active" && <span title="Has not joined yet">⏳</span>}
                   </div>
                 </Card>
               ))}

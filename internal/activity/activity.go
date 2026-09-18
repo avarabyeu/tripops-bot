@@ -23,7 +23,6 @@ import (
 // here keeps the feed vocabulary consistent.
 const (
 	KindMemberJoined      = "member.joined"
-	KindMemberInvited     = "member.invited"
 	KindMemberLeft        = "member.left"
 	KindMemberRoleChanged = "member.role_changed"
 	KindTripCreated       = "trip.created"

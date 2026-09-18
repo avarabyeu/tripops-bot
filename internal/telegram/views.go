@@ -113,7 +113,7 @@ func tripMenuView(v dashboard.View, miniAppURL string) view {
 		bold(strings.ToUpper(esc(trip.Title))),
 		dateRange(trip),
 		"",
-		fmt.Sprintf("👥 %d of %d confirmed", v.People.Active, v.People.Total),
+		fmt.Sprintf("👥 %d going", v.People.Active),
 	}
 	if v.Transport.Vehicles > 0 {
 		lines = append(lines, fmt.Sprintf("🚗 %d vehicle(s), %d of %d seats taken",
@@ -217,19 +217,10 @@ func timelineView(trip trips.Trip, list []events.Event, me core.ID) view {
 func peopleView(trip trips.Trip, members []trips.Member, inviteURL string) view {
 	cid := trip.ID.Compact()
 	lines := []string{bold("👥 PEOPLE"), ""}
-	active := 0
+	// Everyone listed has joined: that is the only way onto a trip.
+	lines = append(lines, fmt.Sprintf("%d going", len(members)), "")
 	for _, m := range members {
-		if m.Active() {
-			active++
-		}
-	}
-	lines = append(lines, fmt.Sprintf("%d of %d confirmed", active, len(members)), "")
-	for _, m := range members {
-		mark := "☑"
-		if !m.Active() {
-			mark = "⏳"
-		}
-		line := fmt.Sprintf("%s %s", mark, esc(m.DisplayName))
+		line := "☑ " + esc(m.DisplayName)
 		if m.Role != core.RoleMember {
 			line += " " + italic("("+string(m.Role)+")")
 		}

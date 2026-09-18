@@ -57,7 +57,7 @@ export function TripHome() {
             <Tile
               emoji="👥"
               label="People"
-              hint={`${data.people.active} going${data.people.invited ? ` · ${data.people.invited} invited` : ""}`}
+              hint={`${data.people.active} going`}
               onClick={() => nav.push({ name: "people", params: { tripId } })}
             />
             <Tile

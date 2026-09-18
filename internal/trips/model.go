@@ -117,11 +117,10 @@ func (i Invite) Usable(now time.Time) bool {
 	}
 }
 
-// MemberCounts summarises the group for the dashboard.
+// MemberCounts summarises the group for the dashboard. One number, because
+// everyone on a trip has joined it by definition.
 type MemberCounts struct {
-	Total   int `json:"total"`
-	Active  int `json:"active"`
-	Invited int `json:"invited"`
+	Active int `json:"active"`
 }
 
 // Models lists the tables this module owns, for the migration runner.

@@ -77,10 +77,9 @@ func (r *Repo) ListTripsForUser(ctx context.Context, userID core.ID, includeArch
 		Table("trips AS t").
 		Select(`t.*, m.role AS role,
 			(SELECT count(*) FROM trip_members x WHERE x.trip_id = t.id AND x.status = 'active') AS member_count,
-			(SELECT count(*) FROM trip_members x WHERE x.trip_id = t.id AND x.status = 'invited') AS pending_count,
 			(SELECT count(*) FROM decisions d WHERE d.trip_id = t.id AND d.status = 'open') AS open_decisions`).
 		Joins("JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?", userID).
-		Where("m.status IN ?", []string{string(core.MemberActive), string(core.MemberInvited)}).
+		Where("m.status = ?", string(core.MemberActive)).
 		Order("CASE WHEN t.status = 'archived' THEN 1 ELSE 0 END, t.start_date DESC, t.created_at DESC")
 	if !includeArchived {
 		query = query.Where("t.status <> ?", string(core.TripArchived))
@@ -218,16 +217,11 @@ func (r *Repo) UpdateMember(ctx context.Context, m Member) (Member, error) {
 }
 
 // MemberCounts is the group summary used by the dashboard.
-//
-// COUNT(CASE WHEN …) rather than PostgreSQL's FILTER clause: the aggregate has
-// to run on SQLite too.
 func (r *Repo) MemberCounts(ctx context.Context, tripID core.ID) (MemberCounts, error) {
 	var c MemberCounts
 	err := r.db.WithContext(ctx).Table("trip_members").
-		Select(`count(CASE WHEN status IN ('active','invited') THEN 1 END) AS total,
-			count(CASE WHEN status = 'active' THEN 1 END) AS active,
-			count(CASE WHEN status = 'invited' THEN 1 END) AS invited`).
-		Where("trip_id = ?", tripID).
+		Select("count(*) AS active").
+		Where("trip_id = ? AND status = ?", tripID, string(core.MemberActive)).
 		Scan(&c).Error
 	if err != nil {
 		return MemberCounts{}, core.Internal(fmt.Errorf("trips: member counts: %w", err))
