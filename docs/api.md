@@ -88,6 +88,10 @@ first, so a form can show all of its errors at once.
 | `GET` | `/trips/{tripID}/dashboard` | member — the whole home screen in one call |
 | `GET` | `/trips/{tripID}/activity` | member |
 
+The currency can only be changed while the trip has no expenses. Amounts are
+minor units of it with no rate history, so changing it later would silently
+reinterpret every recorded expense; the attempt returns `conflict`.
+
 Deleting a trip removes its people, timeline, decisions, logistics,
 accommodation, checklists, expenses and settlements. There is no soft delete:
 archiving covers "we are done with this trip", so a hidden copy of one that

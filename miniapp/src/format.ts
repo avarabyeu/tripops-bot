@@ -125,6 +125,26 @@ export const CATEGORY_NAMES: Record<string, string> = {
   other: "",
 };
 
+/**
+ * The currencies the backend accepts, in the order `core.SupportedCurrencies`
+ * returns them. Adding one here without adding it there gets a 422.
+ */
+export const CURRENCIES = ["CZK", "EUR", "GBP", "PLN", "UAH", "USD"] as const;
+
+/**
+ * Every IANA zone the browser knows, falling back to the device's own when the
+ * runtime is too old to enumerate them. Hard-coding a list of "likely" zones
+ * is wrong for exactly the person who needs to change it.
+ */
+export function timezones(): string[] {
+  const device = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const all = (Intl as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.(
+    "timeZone",
+  );
+  if (!all || all.length === 0) return [device];
+  return all.includes(device) ? all : [device, ...all];
+}
+
 export const VEHICLE_TYPE_NAMES: Record<string, string> = {
   car: "Car",
   van: "Van",

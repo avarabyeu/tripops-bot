@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api, ApiError } from "../api";
-import { dateRange } from "../format";
+import { CURRENCIES, dateRange } from "../format";
 import { useNavigation } from "../router";
 import { useAsync } from "../useAsync";
 import { Loaded, Screen } from "../components/Screen";
@@ -134,7 +134,7 @@ function CreateTripSheet({
       </div>
       <Field label="Currency" error={error?.fields.currency}>
         <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-          {["EUR", "USD", "GBP", "PLN", "UAH", "CZK"].map((c) => (
+          {CURRENCIES.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>

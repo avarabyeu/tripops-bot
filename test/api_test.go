@@ -753,3 +753,100 @@ func TestAPIExpenseEditPermissions(t *testing.T) {
 	alice.do(http.MethodPatch, path, map[string]any{"amount_minor": 12000}, http.StatusOK, nil)
 	alice.do(http.MethodDelete, path, nil, http.StatusNoContent, nil)
 }
+
+// TestAPIEditTrip covers the five facts a trip is made of. A trip created
+// through the bot takes a title and dates and inherits the server's default
+// timezone and currency, so this is where a wrong default gets fixed.
+func TestAPIEditTrip(t *testing.T) {
+	server, _ := newServer(t)
+	alice := newClient(t, server, 7501, "Alice")
+	bob := newClient(t, server, 7502, "Bob")
+
+	var trip struct {
+		ID string `json:"id"`
+	}
+	alice.do(http.MethodPost, "/api/v1/trips", map[string]any{
+		"title": "Brevet", "start_date": "2026-05-01", "end_date": "2026-05-03",
+	}, http.StatusCreated, &trip)
+	path := "/api/v1/trips/" + trip.ID
+
+	var invite struct {
+		Token string `json:"token"`
+	}
+	alice.do(http.MethodPost, path+"/invites", map[string]any{}, http.StatusCreated, &invite)
+	bob.do(http.MethodPost, "/api/v1/invites/"+invite.Token+"/join", nil, http.StatusOK, nil)
+
+	// An event pins an instant, so the date and timezone edits below can be
+	// checked for not dragging it along.
+	var event struct {
+		ID      string `json:"id"`
+		StartAt string `json:"start_at"`
+	}
+	alice.do(http.MethodPost, path+"/events", map[string]any{
+		"title": "Departure", "type": "departure", "start_at": "2026-05-01T06:00:00Z",
+	}, http.StatusCreated, &event)
+
+	var updated struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		StartDate   string `json:"start_date"`
+		Timezone    string `json:"timezone"`
+		Currency    string `json:"currency"`
+	}
+	alice.do(http.MethodPatch, path, map[string]any{
+		"title":       "Brevet Łódź 200",
+		"description": "Two days, one hotel.",
+		"start_date":  "2026-05-02",
+		"timezone":    "Europe/Warsaw",
+		"currency":    "PLN",
+	}, http.StatusOK, &updated)
+	if updated.Title != "Brevet Łódź 200" || updated.Currency != "PLN" ||
+		updated.Timezone != "Europe/Warsaw" || updated.StartDate != "2026-05-02" {
+		t.Fatalf("update = %+v", updated)
+	}
+
+	// The trip list is the place the wrong title would keep showing up.
+	var list struct {
+		Trips []struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+		} `json:"trips"`
+	}
+	bob.do(http.MethodGet, "/api/v1/trips", nil, http.StatusOK, &list)
+	if len(list.Trips) != 1 || list.Trips[0].Title != "Brevet Łódź 200" {
+		t.Errorf("trip list = %+v", list.Trips)
+	}
+
+	// Moving the dates does not move anything on the timeline, and neither
+	// does changing the timezone: instants are stored in UTC and the zone is a
+	// display concern.
+	var events struct {
+		Events []struct {
+			ID      string `json:"id"`
+			StartAt string `json:"start_at"`
+		} `json:"events"`
+	}
+	alice.do(http.MethodGet, path+"/events", nil, http.StatusOK, &events)
+	if len(events.Events) != 1 || events.Events[0].StartAt != event.StartAt {
+		t.Errorf("event moved with the trip: %+v, was %q", events.Events, event.StartAt)
+	}
+
+	// A plain member may look but not edit.
+	bob.do(http.MethodPatch, path, map[string]any{"title": "Not Bob's to rename"},
+		http.StatusForbidden, nil)
+
+	// Once money is recorded the currency is fixed: amounts are minor units of
+	// it with no rate history, so changing it would reinterpret every expense.
+	alice.do(http.MethodPost, path+"/expenses", map[string]any{
+		"title": "Fuel", "amount_minor": 3000, "category": "fuel",
+	}, http.StatusCreated, nil)
+	alice.do(http.MethodPatch, path, map[string]any{"currency": "EUR"}, http.StatusConflict, nil)
+	// Everything else still saves; only the currency is pinned.
+	alice.do(http.MethodPatch, path, map[string]any{"title": "Brevet Łódź 300"}, http.StatusOK, nil)
+	// And re-sending the currency it already has is not a change.
+	alice.do(http.MethodPatch, path, map[string]any{"currency": "PLN"}, http.StatusOK, nil)
+
+	// An archived trip refuses edits like every other write.
+	alice.do(http.MethodPatch, path, map[string]any{"status": "archived"}, http.StatusOK, nil)
+	alice.do(http.MethodPatch, path, map[string]any{"title": "Too late"}, http.StatusConflict, nil)
+}
