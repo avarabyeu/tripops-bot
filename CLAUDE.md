@@ -54,6 +54,28 @@ After `git push`, say that CI was triggered and stop. **Do not poll `gh run`
 for the result** unless the session asks for it. Watching a run to completion
 holds the turn open for minutes and reports what the author can already see.
 
+## How work flows
+
+```
+product-owner  →  architect  →  backend-developer   →  test-engineer
+docs/features/    docs/specs/     frontend-developer     test/, *_test.go
+```
+
+- **product-owner** decides what is worth building and writes a request with
+  testable acceptance criteria.
+- **architect** makes the technical decisions — schema, module boundaries, API
+  surface — and cuts them into ordered tasks, each of which compiles and could
+  ship alone. It sends a request back when it hides a product decision.
+- **backend-developer** and **frontend-developer** implement the tasks in
+  order — Go and `miniapp/` respectively — and say so rather than diverging
+  when the spec turns out to be wrong.
+- **test-engineer** tests the *feature request*, not the specification. The
+  criteria are the contract.
+
+Not every change needs the whole chain. A bug fix or a one-file change goes
+straight to a developer. Ask for a spec when a change adds a table, crosses
+more than one module, or would let the bot and the Mini App disagree.
+
 ## Commands
 
 Use `task` (Taskfile.yml); it is what CI runs.

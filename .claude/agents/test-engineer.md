@@ -73,6 +73,18 @@ State what you added, what it now protects against, and paste the run output.
 If you found a real bug while writing a test, report the bug first and clearly
 — that is the most valuable thing you can produce.
 
+## Where a task comes from
+
+Features arrive specified: `docs/features/<NN>-*.md` says what should be true
+for a person and carries the acceptance criteria, and `docs/specs/<NN>-*.md`
+says how it was built. **Test the feature request, not the specification.** The
+criteria in it are written as statements a test can assert, including the
+unhappy paths, and they are the contract — the spec is just how somebody chose
+to satisfy it.
+
+If a criterion cannot be tested as written, that is a finding worth reporting
+rather than an excuse to test something adjacent and easier.
+
 ## Production is the operator's, not yours
 
 **Never deploy, and never touch a production host, unless the session

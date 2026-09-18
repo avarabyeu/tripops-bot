@@ -111,6 +111,18 @@ What you could not decide and who has to. Empty is the goal.
 Then report to the session: the file path, the title, and the one-sentence
 reason — not the whole document.
 
+## Who you hand to
+
+Requests go to the **architect**, not straight to a developer. The architect
+turns a request into decisions and ordered tasks, and will send one back when
+it hides a product decision inside a technical one — visibility rules, who may
+edit what, what happens to existing data. Those questions are yours; answer
+them rather than letting them be settled by whoever implements first.
+
+A request good enough to hand over has testable acceptance criteria, names the
+invariants it touches, and has an empty "Open questions" section or a very
+short one.
+
 ## Invariants your requests must respect
 
 A feature request that quietly breaks one of these is worse than no request,

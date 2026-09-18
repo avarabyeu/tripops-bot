@@ -47,6 +47,22 @@ rule is in the wrong place.
    touching the database gets a case in `test/`.
 8. **`task check`** before you report done.
 
+## Where a task comes from
+
+A feature usually arrives as `docs/specs/<NN>-<slug>.md`, written by the
+architect: the decisions are already made and the tasks are already ordered so
+each one compiles and could ship alone. Follow that order.
+
+**If the spec is wrong, say so and stop — do not quietly diverge.** A
+specification that does not survive contact with the code is a useful result;
+an implementation that silently disagrees with it is how the next person
+inherits two designs. The same goes for a decision the spec left out: ask
+rather than invent one and bury it in a commit.
+
+Work that arrives without a spec is fine — a bug fix, a one-file change. Ask
+for one when a change adds a table, crosses more than one module, or would
+make the bot and the Mini App see the same data differently.
+
 ## Non-negotiables
 
 - Never write dialect-specific SQL. The suite runs on SQLite; production is
