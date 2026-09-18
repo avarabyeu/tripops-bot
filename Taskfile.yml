@@ -23,6 +23,8 @@ vars:
   DEV_DATABASE_URL: '{{.DATABASE_URL | default "sqlite://tripops.db"}}'
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  # Port for the throwaway PostgreSQL that test:integration runs.
+  TEST_PG_PORT: '{{.TEST_PG_PORT | default "55432"}}'
   # The public stack: the PostgreSQL compose file plus the untracked overlay
   # that adds the domain and the proxy labels. DEPLOY_CONTEXT comes from
   # .env.production, so which machine this deploys to is not in the repository;
@@ -30,11 +32,6 @@ vars:
   # The server's architecture, which is not this laptop's.
   DEPLOY_PLATFORM: '{{.DEPLOY_PLATFORM | default "linux/amd64"}}'
   DEPLOY: docker ${DEPLOY_CONTEXT:+--context "$DEPLOY_CONTEXT"} compose -f docker-compose.yml -f docker-compose.deploy.yml --env-file .env.production
-
-env:
-  # Pure Go builds everywhere: the SQLite driver needs no C toolchain, and the
-  # resulting binary runs in a scratch container.
-  CGO_ENABLED: "0"
 
 tasks:
   default:
@@ -47,6 +44,11 @@ tasks:
 
   build:
     desc: Build the tripops binary into bin/
+    env:
+      # Static binary: the SQLite driver is pure Go, so the result runs in a
+      # scratch container. Deliberately not set globally — `go test -race`
+      # needs cgo on Linux, and a global setting silently broke it in CI.
+      CGO_ENABLED: "0"
     sources:
       - "**/*.go"
       - go.mod
@@ -81,23 +83,33 @@ tasks:
       - go test -race -count=1 ./internal/...
 
   test:integration:
-    desc: Run the integration suite against PostgreSQL (start it with `task docker:pg:up`)
-    env:
-      TEST_DATABASE_URL: '{{.TEST_DATABASE_URL | default "postgres://tripops:tripops@localhost:5432/tripops_test?sslmode=disable"}}'
+    desc: Run the integration suite against PostgreSQL, the engine production is not
     cmds:
-      - go test -race -count=1 ./test/...
+      # The suite runs on SQLite everywhere else; this proves the schema and
+      # every repository work on PostgreSQL too. The container is this task's
+      # own, so there is nothing to start or clean up by hand.
+      - |
+        set -e
+        name=tripops-test-pg
+        cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; }
+        trap cleanup EXIT
+        cleanup
+        docker run -d --name "$name" -e POSTGRES_USER=tripops \
+          -e POSTGRES_PASSWORD=tripops -e POSTGRES_DB=tripops_test \
+          -p {{.TEST_PG_PORT}}:5432 postgres:17-alpine >/dev/null
+        until docker exec "$name" pg_isready -U tripops -d tripops_test >/dev/null 2>&1; do sleep 1; done
+        TEST_DATABASE_URL='postgres://tripops:tripops@localhost:{{.TEST_PG_PORT}}/tripops_test?sslmode=disable' \
+          go test -race -count=1 ./test/...
+    silent: true
 
   test:cover:
     desc: Run tests and open the coverage report
     cmds:
-      - go test -count=1 -coverprofile=coverage.out -covermode=atomic {{.PKG}}
+      # -coverpkg, or the integration suite's coverage lands on a package
+      # with no statements of its own and every number reads far too low.
+      - go test -count=1 -coverpkg=./... -coverprofile=coverage.out -covermode=atomic {{.PKG}}
       - go tool cover -func=coverage.out | tail -1
       - go tool cover -html=coverage.out
-
-  bench:
-    desc: Run benchmarks
-    cmds:
-      - go test -run '^$' -bench . -benchmem {{.PKG}}
 
   # ----------------------------------------------------------------- quality --
 
@@ -107,34 +119,13 @@ tasks:
       - golangci-lint fmt
       - go mod tidy
 
-  vet:
-    desc: Run go vet
-    cmds:
-      - go vet {{.PKG}}
-
   lint:
-    desc: Run golangci-lint (install it with `task tools`)
-    cmds:
-      - golangci-lint run
-
-  tools:
-    desc: Install the development tools
-    cmds:
-      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-
-  check:
-    desc: Everything CI runs — format check, vet, lint, tests, build
-    cmds:
-      - task: lint:optional
-      - task: vet
-      - task: test
-      - task: build
-
-  lint:optional:
-    desc: Format check and lint, if golangci-lint is installed
+    desc: Check formatting and lint, if golangci-lint is installed
     cmds:
       - |
         if command -v golangci-lint >/dev/null 2>&1; then
+          # fmt first: it prints the diff, which is what you actually want to
+          # see. `task fmt` applies it.
           golangci-lint fmt --diff
           golangci-lint run
         else
@@ -143,10 +134,27 @@ tasks:
         fi
     silent: true
 
-  fmt:check:
-    desc: Fail if anything is not formatted
+  tools:
+    desc: Install the development tools
     cmds:
-      - golangci-lint fmt --diff
+      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+      - task: hooks
+
+  hooks:
+    desc: Point git at .githooks, so commits are format-checked first
+    cmds:
+      - git config core.hooksPath .githooks
+      - echo "git hooks enabled — pre-commit checks formatting"
+    silent: true
+
+  check:
+    desc: Everything CI runs — format check, lint, vet, tests, build
+    cmds:
+      - task: lint
+      # Always runs, even where golangci-lint is not installed.
+      - go vet ./...
+      - task: test
+      - task: build
 
   # -------------------------------------------------------------- migrations --
 
@@ -165,14 +173,6 @@ tasks:
       DATABASE_URL: "{{.DEV_DATABASE_URL}}"
     cmds:
       - ./{{.BINARY}} migrate status
-
-  migrate:down:
-    desc: Roll back the last migration (drops data)
-    deps: [build]
-    env:
-      DATABASE_URL: "{{.DEV_DATABASE_URL}}"
-    cmds:
-      - ./{{.BINARY}} migrate down --yes --steps 1
 
   migrate:new:
     desc: Create a new migration pair — task migrate:new -- add_trip_notes
@@ -211,27 +211,6 @@ tasks:
     desc: Follow the backend logs of the default stack
     cmds:
       - docker compose logs -f backend
-
-  docker:pg:up:
-    desc: Start the PostgreSQL stack (what production runs)
-    cmds:
-      - docker compose -f docker-compose-pg.yml up --build -d
-      - docker compose -f docker-compose-pg.yml ps
-
-  docker:pg:down:
-    desc: Stop the PostgreSQL stack
-    cmds:
-      - docker compose -f docker-compose-pg.yml down
-
-  docker:pg:logs:
-    desc: Follow the backend logs of the PostgreSQL stack
-    cmds:
-      - docker compose -f docker-compose-pg.yml logs -f backend
-
-  docker:pg:psql:
-    desc: Open a psql shell on the PostgreSQL stack
-    cmds:
-      - docker compose -f docker-compose-pg.yml exec postgres psql -U tripops -d tripops
 
   # -------------------------------------------------------------- deployment --
   # These read docker-compose.deploy.yml and .env.production, neither of which
@@ -337,31 +316,7 @@ tasks:
     cmds:
       - "{{.DEPLOY}} exec backend /usr/local/bin/tripops bot set-webhook"
 
-  deploy:ps:
-    dotenv: [".env.production"]
-    desc: Show the deployed stack
-    cmds:
-      - "{{.DEPLOY}} ps"
-
   # --------------------------------------------------------------- telegram --
-
-  bot:info:
-    desc: Show which bot account TELEGRAM_BOT_TOKEN belongs to
-    deps: [build]
-    cmds:
-      - ./{{.BINARY}} bot info
-
-  bot:webhook:
-    desc: Point Telegram at this deployment
-    deps: [build]
-    cmds:
-      - ./{{.BINARY}} bot set-webhook
-
-  bot:polling:
-    desc: Drop the webhook so long polling works again
-    deps: [build]
-    cmds:
-      - ./{{.BINARY}} bot delete-webhook
 
   clean:
     desc: Remove build output and local databases

@@ -11,7 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CGO_ENABLED: "0"
+  # Keep in step with what developers run; see .golangci.yml.
+  GOLANGCI_VERSION: v2.13.2
 
 jobs:
   backend:
@@ -28,20 +29,33 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      # Formatting and linting come from the same tool and the same config, so
-      # "it passes locally" and "it passes in CI" cannot disagree.
-      - uses: golangci/golangci-lint-action@v6
+      # install-only, so the two steps below are the same commands `task lint`
+      # runs locally — the action still handles the download, the version and
+      # the binary cache, and puts golangci-lint on PATH.
+      #
+      # The version is pinned rather than "latest": the action used to resolve
+      # that to a v1 release, which cannot parse a v2 config or a go.mod
+      # targeting a newer Go, and that is what had CI failing before it linted
+      # anything.
+      - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
-          args: --timeout 5m
+          version: ${{ env.GOLANGCI_VERSION }}
+          install-only: true
 
       - name: Check formatting
         run: golangci-lint fmt --diff
 
+      - name: Lint
+        run: golangci-lint run --timeout 5m
+
       - name: Test (SQLite)
+        # No CGO_ENABLED=0 here: the race detector needs cgo on Linux, even
+        # though darwin builds it without.
         run: go test -race -count=1 ./...
 
       - name: Build
+        env:
+          CGO_ENABLED: "0"
         run: go build -trimpath -o bin/tripops ./cmd/tripops
 
   postgres:
