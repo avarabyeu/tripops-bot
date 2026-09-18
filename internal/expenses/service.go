@@ -123,8 +123,13 @@ type Patch struct {
 	Notes        *string        `json:"notes"`
 }
 
-// Update edits an expense. The person who recorded it and organisers may edit;
-// everyone else would be rewriting somebody's receipt.
+// Update edits an expense. The person who recorded it may edit it, and so may
+// the trip owner; everyone else would be rewriting somebody's receipt.
+//
+// Organisers are deliberately not on that list, unlike everywhere else in the
+// product. Admin is the "runs the trip" role — it moves events and books
+// rooms — and the ledger is the one place where being able to quietly change
+// somebody else's numbers is worth withholding from it.
 func (s *Service) Update(ctx context.Context, access trips.Access, id core.ID, in Patch) (Expense, error) {
 	if err := access.RequireWrite(); err != nil {
 		return Expense{}, err
@@ -133,8 +138,8 @@ func (s *Service) Update(ctx context.Context, access trips.Access, id core.ID, i
 	if err != nil {
 		return Expense{}, err
 	}
-	if existing.CreatedBy != access.User.ID && !access.IsManager() {
-		return Expense{}, core.Forbidden("only the person who added this expense or an organiser can edit it")
+	if existing.CreatedBy != access.User.ID && !access.IsOwner() {
+		return Expense{}, core.Forbidden("only the person who added this expense or the trip owner can edit it")
 	}
 
 	merged := Input{
@@ -225,8 +230,8 @@ func (s *Service) Delete(ctx context.Context, access trips.Access, id core.ID) e
 	if err != nil {
 		return err
 	}
-	if expense.CreatedBy != access.User.ID && !access.IsManager() {
-		return core.Forbidden("only the person who added this expense or an organiser can delete it")
+	if expense.CreatedBy != access.User.ID && !access.IsOwner() {
+		return core.Forbidden("only the person who added this expense or the trip owner can delete it")
 	}
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err

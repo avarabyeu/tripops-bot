@@ -35,6 +35,12 @@ export function Expenses() {
   const total = (expenses.data ?? []).reduce((sum, e) => sum + e.amount_minor, 0);
   const active = (members.data ?? []).filter((m) => m.status === "active");
 
+  // Editing is for the person who recorded it and the trip owner. Offering the
+  // tap to anyone else would be a sheet that 403s on save.
+  const me = trip.data?.me;
+  const editable = (expense: Expense) =>
+    me !== undefined && (expense.created_by === me.user_id || me.role === "owner");
+
   return (
     <Screen
       title="Expenses"
@@ -60,7 +66,11 @@ export function Expenses() {
                 // Tapping an expense opens it for editing. Splits go stale —
                 // somebody joins the trip after the room is booked — so this
                 // is a normal thing to do, not a buried correction.
-                <Card key={expense.id} tight onClick={() => setEditing(expense)}>
+                <Card
+                  key={expense.id}
+                  tight
+                  onClick={editable(expense) ? () => setEditing(expense) : undefined}
+                >
                   <div className="card-row">
                     <div>
                       <div className="title">

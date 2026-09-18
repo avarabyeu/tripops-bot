@@ -687,3 +687,69 @@ func TestAPIEditExpenseAfterSomeoneJoins(t *testing.T) {
 		t.Errorf("report after deleting the only expense = %+v", report)
 	}
 }
+
+// TestAPIExpenseEditPermissions pins who may change a recorded expense: the
+// person who recorded it, and the trip owner. Not organisers — admin is the
+// "runs the trip" role, and the ledger is where quietly changing somebody
+// else's numbers is worth withholding from it.
+func TestAPIExpenseEditPermissions(t *testing.T) {
+	server, _ := newServer(t)
+	alice := newClient(t, server, 7401, "Alice") // owner
+	bob := newClient(t, server, 7402, "Bob")     // records the expense
+	cara := newClient(t, server, 7403, "Cara")   // promoted to organiser
+
+	var trip struct {
+		ID string `json:"id"`
+	}
+	alice.do(http.MethodPost, "/api/v1/trips", map[string]any{
+		"title": "Brevet", "start_date": "2026-05-01", "end_date": "2026-05-03",
+	}, http.StatusCreated, &trip)
+
+	var invite struct {
+		Token string `json:"token"`
+	}
+	alice.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/invites", map[string]any{}, http.StatusCreated, &invite)
+	bob.do(http.MethodPost, "/api/v1/invites/"+invite.Token+"/join", nil, http.StatusOK, nil)
+	cara.do(http.MethodPost, "/api/v1/invites/"+invite.Token+"/join", nil, http.StatusOK, nil)
+
+	var roster struct {
+		Members []struct {
+			ID          string `json:"id"`
+			DisplayName string `json:"display_name"`
+			Role        string `json:"role"`
+		} `json:"members"`
+	}
+	alice.do(http.MethodGet, "/api/v1/trips/"+trip.ID+"/members", nil, http.StatusOK, &roster)
+	var caraID string
+	for _, m := range roster.Members {
+		if m.DisplayName == "Cara" {
+			caraID = m.ID
+		}
+	}
+	if caraID == "" {
+		t.Fatalf("cara is not on the trip: %+v", roster.Members)
+	}
+	alice.do(http.MethodPatch, "/api/v1/trips/"+trip.ID+"/members/"+caraID,
+		map[string]any{"role": "admin"}, http.StatusOK, nil)
+
+	var expense struct {
+		ID string `json:"id"`
+	}
+	bob.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/expenses", map[string]any{
+		"title": "Hotel", "amount_minor": 9000, "category": "accommodation",
+	}, http.StatusCreated, &expense)
+	path := "/api/v1/trips/" + trip.ID + "/expenses/" + expense.ID
+
+	// Cara runs the trip, but this is Bob's receipt.
+	cara.do(http.MethodPatch, path, map[string]any{"title": "Not Cara's to rename"},
+		http.StatusForbidden, nil)
+	cara.do(http.MethodDelete, path, nil, http.StatusForbidden, nil)
+
+	// Bob recorded it, so he can correct it.
+	bob.do(http.MethodPatch, path, map[string]any{"title": "Hotel (2 nights)"}, http.StatusOK, nil)
+
+	// Alice neither recorded nor paid for it, but she owns the trip, so the
+	// ledger is not left stuck if Bob goes quiet.
+	alice.do(http.MethodPatch, path, map[string]any{"amount_minor": 12000}, http.StatusOK, nil)
+	alice.do(http.MethodDelete, path, nil, http.StatusNoContent, nil)
+}

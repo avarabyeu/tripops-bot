@@ -27,9 +27,12 @@ member of *this* trip, sufficient role. A non-member gets `404`, not `403`.
 
 | Role | May |
 | --- | --- |
-| owner | everything, plus archive and transfer ownership |
-| admin | edit the trip, manage people, create and edit all trip content |
+| owner | everything, plus archive, delete, transfer ownership, and edit any expense |
+| admin | edit the trip, manage people, create and edit all trip content except expenses |
 | member | view, update their own participation, vote, add expenses, tick checklist items |
+
+Expenses are the one exception to "admin can edit all trip content": only the
+person who recorded one and the owner may change it.
 
 ## Errors
 
@@ -163,7 +166,7 @@ the text or the assignee of a shared item is an organiser action.
 | Method | Path | Role |
 | --- | --- | --- |
 | `GET`/`POST` | `/trips/{tripID}/expenses` | member — everybody pays for something |
-| `PATCH`/`DELETE` | `/trips/{tripID}/expenses/{expenseID}` | whoever recorded it, or admin |
+| `PATCH`/`DELETE` | `/trips/{tripID}/expenses/{expenseID}` | whoever recorded it, or the owner |
 | `GET` | `/trips/{tripID}/expenses/report` | member — the whole ledger in one call |
 | `GET` | `/trips/{tripID}/balances` | member — balances, suggested transfers, settlements |
 | `POST` | `/trips/{tripID}/settlements` | either party, or admin |
@@ -191,6 +194,10 @@ resolved per-member shares.
 Editing an expense replaces the whole split when `participants` is present,
 which is the point of it: a bill divided between the people who were on the
 trip at the time goes stale the moment somebody else joins.
+
+Note the role: whoever recorded the expense, or the trip owner. Organisers can
+do almost everything else on a trip but not this — see
+`docs/product-decisions.md`.
 
 `GET /balances` returns the suggested transfers already minimised — see
 `docs/product-decisions.md` for the algorithm.

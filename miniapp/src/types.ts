@@ -155,6 +155,8 @@ export interface Expense {
   category: ExpenseCategory;
   paid_by: string;
   paid_by_name?: string;
+  /** The user who recorded it — not a member id. They may edit it; so may the owner. */
+  created_by: string;
   split_type: "equal" | "custom_amount" | "percentage";
   spent_at: string;
   participants: { member_id: string; display_name?: string; share_minor: number }[];

@@ -96,10 +96,15 @@ person who recorded it is the one who knows. Sending the participant list in a
 `PATCH` replaces the whole split and recomputes the shares, so re-splitting is
 one action rather than delete-and-retype.
 
-Organisers can edit anybody's expense; everybody else can only edit their own.
-Rewriting somebody else's receipt is not a thing a peer should be able to do
-quietly, and the ledger is the one part of the product where people care about
-exact numbers.
+Who may: the person who recorded it, and the trip owner. Not organisers —
+which is the one place the admin role does not extend, and deliberately so.
+Admin means "runs the trip": it moves events and books rooms. The ledger is
+where being able to quietly change somebody else's numbers is worth
+withholding, and a trip can have several organisers.
+
+The owner keeps the ability because somebody has to be able to fix a wrong
+expense when the person who entered it has stopped reading the chat, and the
+owner is the single accountable person on a trip.
 
 ## Voting advises, organisers decide
 
