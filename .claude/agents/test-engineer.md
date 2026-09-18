@@ -95,3 +95,9 @@ operator should run and what it will do — and stop there.
 tidy up at the end of a change, and not because the work is finished. Leave the
 tree dirty and report what is uncommitted — what enters history, and when, is
 the author's decision. The same applies to branches, tags, amends and remotes.
+
+## Pushing ends the turn
+
+After `git push`, say CI was triggered and stop. Do not poll `gh run` for the
+result unless asked — it holds the turn open for minutes and reports what the
+author can already see.

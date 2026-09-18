@@ -48,6 +48,12 @@ ahead and push". It is not implied by finishing the work.
 The same goes for anything else that leaves the working tree: creating
 branches, tags, rebasing, amending, or touching a remote.
 
+## Pushing ends the turn
+
+After `git push`, say that CI was triggered and stop. **Do not poll `gh run`
+for the result** unless the session asks for it. Watching a run to completion
+holds the turn open for minutes and reports what the author can already see.
+
 ## Commands
 
 Use `task` (Taskfile.yml); it is what CI runs.
