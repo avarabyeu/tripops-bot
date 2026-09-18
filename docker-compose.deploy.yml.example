@@ -27,6 +27,10 @@ name: tripops
 
 services:
   miniapp:
+    # Built on a developer machine and loaded in by `task deploy:ship`; there
+    # is no registry to fall back to, so say that rather than let compose go
+    # looking on Docker Hub and report a confusing error.
+    pull_policy: never
     # Traefik reaches it over the shared network; nothing is published on the
     # host. `!override` replaces the base file's list rather than appending.
     ports: !override []
@@ -49,6 +53,7 @@ services:
       traefik.http.services.tripops.loadbalancer.server.port: "80"
 
   backend:
+    pull_policy: never
     ports: !override []
     # A directory on the host rather than the base file's named volume, so the
     # database sits somewhere you chose and can be backed up with the rest of

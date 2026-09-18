@@ -251,10 +251,24 @@ mechanism is in the repository; the domain is not.
 ```bash
 cp docker-compose.deploy.yml.example docker-compose.deploy.yml
 cp .env.example .env.production
-# set PUBLIC_DOMAIN, TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME and a password
-task deploy:up
+# set PUBLIC_DOMAIN, DATA_DIR, TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME
+task deploy:release        # build here, ship over SSH, restart the stack
 task deploy:webhook        # point Telegram at it
 ```
+
+**Images are built on your machine, never on the server.** A small VPS does not
+enjoy `go build` and `npm ci` — on 1 CPU and 1 GB they take the box down with
+them. `task deploy:build` cross-builds for `DEPLOY_PLATFORM` (default
+`linux/amd64`) with `docker buildx bake`, reading the build definitions out of
+`docker-compose.yml` so there is no second copy of them; `task deploy:ship`
+pipes `docker save` into `docker load` on the remote context and prunes what
+the previous deploy left behind. No registry: two images at ~30 MB gzipped do
+not need one, and the same bake command pushes to a registry the day that
+changes.
+
+The Dockerfiles pin their builder stages to `$BUILDPLATFORM` and let Go target
+`$TARGETARCH`, so cross-building runs at native speed instead of under QEMU —
+about twelve seconds for both images rather than minutes.
 
 Both files are gitignored, so your domain, webhook secret, database password
 and deployment target stay on the host: nothing in the repository names a

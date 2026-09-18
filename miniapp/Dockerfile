@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
 
 # ----------------------------------------------------------------- builder --
-FROM node:22-alpine AS builder
+# Pinned to the *build* platform. The bundle this stage emits is static files
+# with no architecture, so only the nginx stage below has to match the target;
+# building npm under emulation would cost minutes for nothing.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 
 WORKDIR /app
 

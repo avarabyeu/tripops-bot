@@ -109,6 +109,28 @@ that the tests run on the constrained engine.
 The outbox claims rows by flipping a status and stamping `claimed_at`, with a
 five-minute staleness window, instead of `SELECT … FOR UPDATE SKIP LOCKED`.
 
+## Images are built on a developer machine, not on the server
+
+The server is 1 CPU and 1 GB. `docker compose up --build` there ran `go build`
+and `npm ci` on it, which hung for six minutes and took SSH down with it.
+
+So the images cross-build locally — `docker buildx bake` over the build
+definitions already in `docker-compose.yml`, so there is no second copy of them
+— and travel to the server as `docker save | gzip | docker load` over the SSH
+context. No registry: two images at roughly 30 MB gzipped do not justify one,
+and moving to a registry later is a flag on the same bake command rather than a
+rewrite.
+
+Cross-building only pays off if it does not emulate. Both Dockerfiles pin their
+builder stage to `--platform=$BUILDPLATFORM` and pass `$TARGETARCH` to the Go
+compiler; the Mini App's bundle is static files with no architecture at all, so
+only its nginx stage has to match the target. Both images build in about twelve
+seconds on an arm64 laptop for an amd64 server, against minutes under QEMU.
+
+`deploy:ship` checks the architecture of what it is about to send, because
+`task docker:up` builds the same tags for the developer's own machine and would
+otherwise quietly ship an image the server cannot execute.
+
 ## Production runs SQLite too
 
 Not just development. One backend process, a trip being a handful of people, a

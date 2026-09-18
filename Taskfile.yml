@@ -27,6 +27,8 @@ vars:
   # that adds the domain and the proxy labels. DEPLOY_CONTEXT comes from
   # .env.production, so which machine this deploys to is not in the repository;
   # empty means the current Docker context.
+  # The server's architecture, which is not this laptop's.
+  DEPLOY_PLATFORM: '{{.DEPLOY_PLATFORM | default "linux/amd64"}}'
   DEPLOY: docker ${DEPLOY_CONTEXT:+--context "$DEPLOY_CONTEXT"} compose -f docker-compose.yml -f docker-compose.deploy.yml --env-file .env.production
 
 env:
@@ -235,6 +237,57 @@ tasks:
   # These read docker-compose.deploy.yml and .env.production, neither of which
   # is in the repository: see docker-compose.deploy.yml.example.
 
+  deploy:build:
+    dotenv: [".env.production"]
+    desc: Cross-build the production images locally for the server's architecture
+    env:
+      # Keeps the result a plain image rather than a manifest index, so
+      # `docker save`/`load` stays simple.
+      BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
+    cmds:
+      # bake reads the build definitions out of docker-compose.yml, so there is
+      # no second copy of them here, and it builds both images in parallel.
+      - |
+        docker buildx bake -f docker-compose.yml \
+          --set '*.platform={{.DEPLOY_PLATFORM}}' \
+          --set 'backend.args.VERSION={{.VERSION}}' \
+          --load
+
+  deploy:ship:
+    dotenv: [".env.production"]
+    desc: Send the locally built images to the server over SSH
+    preconditions:
+      - sh: docker image inspect tripops-backend:latest >/dev/null 2>&1
+        msg: "no image to ship — run `task deploy:build` first"
+      # `task docker:up` builds the same tags for this laptop's architecture,
+      # so without this check a local run silently replaces the cross-built
+      # image and ships something the server cannot execute.
+      - sh: |
+          want=$(echo '{{.DEPLOY_PLATFORM}}' | cut -d/ -f2)
+          for image in tripops-backend:latest tripops-miniapp:latest; do
+            docker image inspect "$image" | grep -q "\"Architecture\": \"$want\"" || exit 1
+          done
+        msg: "the local images are not built for {{.DEPLOY_PLATFORM}} — run `task deploy:build` again (a local `task docker:up` overwrites these tags)"
+    cmds:
+      # The server has one CPU and a gigabyte of RAM; it is not going to build
+      # anything. gzip because this goes over SSH.
+      - |
+        set -e
+        docker save tripops-backend:latest tripops-miniapp:latest \
+          | gzip \
+          | docker ${DEPLOY_CONTEXT:+--context "$DEPLOY_CONTEXT"} load
+        # Each deploy orphans the previous image, and disk is as tight as
+        # everything else on that box.
+        docker ${DEPLOY_CONTEXT:+--context "$DEPLOY_CONTEXT"} image prune -f
+    silent: true
+
+  deploy:release:
+    desc: Build locally, ship to the server, restart the stack — the usual path
+    cmds:
+      - task: deploy:build
+      - task: deploy:ship
+      - task: deploy:up
+
   deploy:up:
     dotenv: [".env.production"]
     desc: Start the public stack (backend on SQLite + Mini App behind Traefik)
@@ -244,7 +297,9 @@ tasks:
       - sh: test -f .env.production
         msg: ".env.production is missing — copy .env.example and fill it in"
     cmds:
-      - "{{.DEPLOY}} up --build -d"
+      # No --build: the images are built on a developer machine and loaded in
+      # by `task deploy:ship`.
+      - "{{.DEPLOY}} up -d"
       - "{{.DEPLOY}} ps"
 
   deploy:down:

@@ -11,6 +11,9 @@
 
 services:
   backend:
+    # Named so `docker buildx bake` has a tag to apply and so the deployed
+    # stack can resolve an image that was built elsewhere and loaded in.
+    image: tripops-backend:latest
     build:
       context: .
       args:
@@ -47,6 +50,7 @@ services:
       start_period: 10s
 
   miniapp:
+    image: tripops-miniapp:latest
     build:
       context: ./miniapp
     depends_on:

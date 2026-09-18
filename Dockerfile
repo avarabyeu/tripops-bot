@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
 
 # ----------------------------------------------------------------- builder --
-FROM golang:1.27-alpine AS builder
+# Pinned to the *build* platform, not the target. Go cross-compiles, so an
+# amd64 image builds at full speed on an arm64 laptop; without this, a
+# --platform build runs the whole compiler under QEMU and takes minutes.
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
 
 WORKDIR /src
 
@@ -12,11 +15,15 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
 
 ARG VERSION=docker
+# Set by BuildKit from --platform; empty on a plain `docker build`, where the
+# Go toolchain then defaults to the host architecture, which is what we want.
+ARG TARGETARCH
 # CGO stays off: the SQLite driver is pure Go, so the result is a static binary
-# that runs on an empty base image.
+# that runs on an empty base image — and it cross-compiles with nothing but
+# GOARCH.
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux go build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build \
       -trimpath \
       -ldflags "-s -w -X github.com/avarabyeu/tripops-bot/internal/cli.version=${VERSION}" \
       -o /out/tripops ./cmd/tripops

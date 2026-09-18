@@ -1,0 +1,13 @@
+# The root .dockerignore does not apply here: this image's build context is
+# ./miniapp, and Docker reads the .dockerignore at the context root. Without
+# this file, 73 MB of node_modules is uploaded to the builder on every build.
+#
+# Only exclude what is large and rebuilt anyway. nginx.conf and the Dockerfile
+# stay: the image copies nginx.conf in.
+node_modules
+dist
+.vite
+.env
+.env.*
+!.env.example
+npm-debug.log*
