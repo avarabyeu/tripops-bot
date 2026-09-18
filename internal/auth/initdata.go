@@ -50,8 +50,13 @@ type tgUser struct {
 //	secret        = HMAC_SHA256(key: "WebAppData", data: bot_token)
 //	expected_hash = HMAC_SHA256(key: secret,       data: data_check_string)
 //
-// where data_check_string is every received field except `hash` and
-// `signature`, sorted by key, rendered as "key=value" and joined with "\n".
+// where data_check_string is every received field *except `hash`*, sorted by
+// key, rendered as "key=value" and joined with "\n".
+//
+// Only `hash` is excluded. `signature` — the Ed25519 field Telegram adds for
+// third parties who do not hold the bot token — is part of what `hash` covers,
+// and dropping it makes every launch from a client that sends one fail. It is
+// the separate third-party check, not this one, that excludes both.
 //
 // Never skip this: the `user` field is attacker controlled until the hash
 // checks out.
@@ -72,16 +77,21 @@ func ValidateInitData(raw, botToken string, ttl time.Duration, now time.Time) (I
 		return InitData{}, core.Unauthorized("Telegram init data is not signed")
 	}
 
-	pairs := make([]string, 0, len(values))
-	for key, vals := range values {
-		// `signature` is the Ed25519 third-party signature; it is added
-		// alongside `hash` and is not part of what `hash` covers.
-		if key == "hash" || key == "signature" {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		if key == "hash" {
 			continue
 		}
-		pairs = append(pairs, key+"="+vals[0])
+		keys = append(keys, key)
 	}
-	sort.Strings(pairs)
+	// Sorted by key, not by the rendered "key=value" pair: a key that is a
+	// prefix of another would otherwise order on the character following it.
+	sort.Strings(keys)
+
+	pairs := make([]string, 0, len(keys))
+	for _, key := range keys {
+		pairs = append(pairs, key+"="+values[key][0])
+	}
 
 	secret := hmacSHA256([]byte("WebAppData"), []byte(botToken))
 	expected := hmacSHA256(secret, []byte(strings.Join(pairs, "\n")))
@@ -131,9 +141,12 @@ func hmacSHA256(key, data []byte) []byte {
 	return mac.Sum(nil)
 }
 
-// SignInitData produces valid initData for a set of fields. It exists so tests
-// (and the local dev harness) can exercise the real validation path instead of
-// bypassing it.
+// SignInitData produces valid initData for a set of fields, the way Telegram
+// would. It exists so tests (and the local dev harness) can exercise the real
+// validation path instead of bypassing it.
+//
+// It signs everything except `hash`, which is what makes it a faithful stand-in
+// — including a `signature` field when one is passed.
 func SignInitData(botToken string, fields map[string]string) string {
 	pairs := make([]string, 0, len(fields))
 	for k, v := range fields {

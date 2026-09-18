@@ -101,14 +101,60 @@ func TestValidateInitDataRejectsMalformedInput(t *testing.T) {
 	}
 }
 
-// Telegram adds `signature` next to `hash` for third-party verification; it is
-// not covered by `hash` and must be excluded from the check string.
-func TestValidateInitDataIgnoresSignatureField(t *testing.T) {
+// Telegram adds `signature` next to `hash` for third parties who do not hold
+// the bot token. It is part of what `hash` covers, so it belongs in the
+// data-check-string — excluding it made every launch from a client that sends
+// one fail with "signature is invalid", which is what shipped.
+//
+// Only the separate third-party Ed25519 check excludes both fields.
+func TestValidateInitDataCoversTheSignatureField(t *testing.T) {
 	now := time.Now()
-	raw := signedInitData(t, testToken, now, nil) + "&signature=abc123"
+	raw := signedInitData(t, testToken, now, map[string]string{
+		"signature": "TgqCFa8kRHTHYJ4qm7sDOQ5eHGJkcCFa8kRHTHYJ4qm",
+	})
 
-	if _, err := ValidateInitData(raw, testToken, time.Hour, now); err != nil {
-		t.Fatalf("a signature field must not break validation: %v", err)
+	data, err := ValidateInitData(raw, testToken, time.Hour, now)
+	if err != nil {
+		t.Fatalf("init data carrying a signature was rejected: %v", err)
+	}
+	if data.User.TelegramID != 42 {
+		t.Errorf("telegram id = %d, want 42", data.User.TelegramID)
+	}
+}
+
+// The other half of that: because `signature` is covered, one bolted on after
+// the fact does not verify. Anything else would let a field be added to signed
+// launch parameters unnoticed.
+func TestValidateInitDataRejectsAppendedSignature(t *testing.T) {
+	now := time.Now()
+	raw := signedInitData(t, testToken, now, nil) + "&signature=bolted-on"
+
+	if _, err := ValidateInitData(raw, testToken, time.Hour, now); err == nil {
+		t.Fatal("a field appended after signing was accepted")
+	}
+}
+
+// Real launch parameters carry more than the three fields the other tests use;
+// the check string has to be built from all of them, in key order.
+func TestValidateInitDataWithAFullPayload(t *testing.T) {
+	now := time.Now()
+	raw := signedInitData(t, testToken, now, map[string]string{
+		"chat_instance":  "-3788475317572404878",
+		"chat_type":      "sender",
+		"signature":      "1fk5C1Xx8Xy3pAhWQ0wUvuGJ8DlKxTqPfnTLBPBlUJk",
+		"start_param":    "inv_abc123",
+		"can_send_after": "3600",
+	})
+
+	data, err := ValidateInitData(raw, testToken, time.Hour, now)
+	if err != nil {
+		t.Fatalf("a full payload was rejected: %v", err)
+	}
+	if data.StartParam != "inv_abc123" {
+		t.Errorf("start_param = %q, want the deep link payload", data.StartParam)
+	}
+	if data.ChatType != "sender" {
+		t.Errorf("chat_type = %q", data.ChatType)
 	}
 }
 
