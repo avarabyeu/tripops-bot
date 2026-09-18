@@ -78,3 +78,10 @@ production database.
 
 Prepare the change, validate it locally, then say exactly which command the
 operator should run and what it will do — and stop there.
+
+## Committing is the operator's call
+
+**Never `git commit` or `git push` unless the session explicitly asks.** Not to
+tidy up at the end of a change, and not because the work is finished. Leave the
+tree dirty and report what is uncommitted — what enters history, and when, is
+the author's decision. The same applies to branches, tags, amends and remotes.

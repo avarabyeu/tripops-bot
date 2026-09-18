@@ -1,0 +1,24 @@
+#!/bin/sh
+# Formatting is settled before anything enters history, so no commit exists
+# only to reformat what the one before it got wrong. CI only validates.
+#
+# Install with: task hooks
+#
+# Skip for one commit with: git commit --no-verify
+
+if ! command -v golangci-lint >/dev/null 2>&1; then
+    echo "pre-commit: golangci-lint is not installed, skipping the format check."
+    echo "            Install it with 'task tools'."
+    exit 0
+fi
+
+if golangci-lint fmt --diff >/dev/null 2>&1; then
+    exit 0
+fi
+
+echo "pre-commit: this is not formatted."
+echo
+golangci-lint fmt --diff 2>&1 | head -40
+echo
+echo "Run 'task fmt' and stage the result."
+exit 1

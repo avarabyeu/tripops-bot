@@ -330,13 +330,19 @@ write in progress and produce a snapshot that looks fine and will not open.
 ## Development
 
 ```bash
+task tools     # golangci-lint + the git hooks; run once
 task check     # format check, lint, vet, tests, build — what CI runs
-task fmt       # gofumpt + import grouping, via golangci-lint
-task lint      # needs `task tools` once
+task fmt       # apply formatting (gofumpt + import grouping)
+task lint      # check it, without changing anything
 ```
 
 Formatting and linting come from golangci-lint with one config
 (`.golangci.yml`), so there is no separate `gofmt` step to disagree with it.
+
+`task tools` also points git at `.githooks`, where a pre-commit hook rejects
+unformatted code — formatting is settled before it enters history, so no commit
+exists only to reformat the one before it. CI never reformats; it validates
+with `golangci-lint fmt --diff` and fails.
 
 [`CLAUDE.md`](CLAUDE.md) holds the working notes and the rules that are easy to
 break by accident. Significant decisions are recorded in

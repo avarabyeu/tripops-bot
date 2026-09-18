@@ -34,6 +34,20 @@ for permission or ask them to run the command and paste the output.
 task deploy:up", "go ahead and push". It is not implied by a green light on a
 prerequisite.
 
+## Committing is the operator's call too
+
+**Never `git commit` or `git push` unless this session explicitly asks.** Not to
+"tidy up" at the end of a change, not because the work is finished and the tree
+is dirty, not because the previous change was committed. Leave the working tree
+as it is and say what is uncommitted; the decision about what enters history,
+and when, is the author's.
+
+"Explicitly asks" means a request to do it — "commit this", "push it", "go
+ahead and push". It is not implied by finishing the work.
+
+The same goes for anything else that leaves the working tree: creating
+branches, tags, rebasing, amending, or touching a remote.
+
 ## Commands
 
 Use `task` (Taskfile.yml); it is what CI runs.
@@ -139,4 +153,6 @@ Comments explain *why*, never restate the code. Match the surrounding file.
 
 Formatting is `golangci-lint fmt` (gofumpt plus import grouping), not bare
 `gofmt` — one tool and one config for both formatting and linting. Run
-`task fmt` rather than reaching for `gofmt -w`.
+`task fmt` rather than reaching for `gofmt -w`, and run it *before* committing:
+the pre-commit hook in `.githooks` rejects unformatted code, and CI only
+validates (`fmt --diff`), it never reformats.
