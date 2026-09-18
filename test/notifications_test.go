@@ -1,11 +1,14 @@
 package test
 
 import (
+	"bytes"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/avarabyeu/tripops-bot/internal/core"
+	"github.com/avarabyeu/tripops-bot/internal/db"
 	"github.com/avarabyeu/tripops-bot/internal/decisions"
 	"github.com/avarabyeu/tripops-bot/internal/events"
 	"github.com/avarabyeu/tripops-bot/internal/expenses"
@@ -13,6 +16,7 @@ import (
 	"github.com/avarabyeu/tripops-bot/internal/testsupport"
 	"github.com/avarabyeu/tripops-bot/internal/trips"
 	"github.com/avarabyeu/tripops-bot/internal/users"
+	"github.com/avarabyeu/tripops-bot/migrations"
 )
 
 // outbox reads the queued notifications for one user, newest last. Tests read
@@ -432,5 +436,64 @@ func TestInstantsAreStoredInUTC(t *testing.T) {
 	}
 	if len(inRange) != 1 {
 		t.Errorf("the 24 hour window found %d events, want 1", len(inRange))
+	}
+}
+
+// TestDedupeIsSilent is about the log, not the rows.
+//
+// Enqueueing an existing dedupe key is the normal outcome of the scheduler
+// re-evaluating a rule, and it used to be handled by letting the unique index
+// raise and catching the error. That worked, but the driver had already logged
+// a failed INSERT, so a healthy deployment wrote an alarming warning about
+// UNIQUE constraints on every tick.
+func TestDedupeIsSilent(t *testing.T) {
+	ctx := t.Context()
+
+	// Its own database and logger: the shared harness discards logs, and the
+	// log is exactly what this test is about. SQLite regardless of
+	// TEST_DATABASE_URL — what is asserted here is engine-independent.
+	var logged bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	database, err := db.Open(ctx, db.Options{
+		URL: "file:" + t.TempDir() + "/notify.db",
+		Log: log,
+	})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	if err := migrations.Run(ctx, database, log); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	recipient, err := users.NewService(database.DB).EnsureUser(ctx, users.Identity{
+		TelegramID: 9911, FirstName: "Vasya", ChatID: 9911,
+	})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	notifier := notify.NewService(database.DB, log)
+	reminder := notify.Notification{
+		UserID: recipient.ID, Category: notify.CategoryReminders,
+		Body: "Departure at 19:00", DedupeKey: notify.DedupeKey("event_reminder", "abc"),
+	}
+	for range 3 {
+		if err := notifier.Enqueue(ctx, reminder); err != nil {
+			t.Fatalf("enqueue: %v", err)
+		}
+	}
+
+	var count int64
+	if err := database.Table("notifications").Count(&count).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("three enqueues produced %d rows, want 1", count)
+	}
+	if out := logged.String(); strings.Contains(out, "UNIQUE constraint") ||
+		strings.Contains(out, "constraint failed") {
+		t.Errorf("a deduplicated insert logged a failure:\n%s", out)
 	}
 }

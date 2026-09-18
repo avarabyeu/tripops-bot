@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/avarabyeu/tripops-bot/internal/core"
 	"github.com/avarabyeu/tripops-bot/internal/db"
@@ -162,9 +163,19 @@ func (s *Service) Enqueue(ctx context.Context, items ...Notification) error {
 		}
 		n.ChatID = 0
 
-		if err := s.db.WithContext(ctx).Create(&n).Error; err != nil {
-			// A duplicate dedupe key means the reminder already exists, which
-			// is exactly what the key is for.
+		// DO NOTHING rather than letting the unique index raise: a reminder
+		// that already exists is the normal outcome of the scheduler
+		// re-evaluating a rule, not a problem. Catching the error after the
+		// fact worked, but the driver had already logged a failed statement,
+		// so every tick wrote an alarming warning about working as designed.
+		//
+		// A NULL dedupe_key never conflicts, so unkeyed notifications are
+		// always inserted.
+		err := s.db.WithContext(ctx).
+			Clauses(clause.OnConflict{DoNothing: true}).
+			Create(&n).Error
+		if err != nil {
+			// Belt and braces: DO NOTHING should have covered it.
 			if db.IsDuplicate(err) {
 				continue
 			}
