@@ -273,11 +273,95 @@ it.
 
 ## A hand-written Telegram client
 
-The bot needs six API methods. A full SDK would add a dependency and a lot of
-surface for no benefit, and the client is the one place where exact control
-over HTML escaping matters. Callback payloads use a 22-character base64 id
-(`core.ID.Compact`) because Telegram caps `callback_data` at 64 bytes, which is
-not enough for two dashed UUIDs.
+`internal/telegram/client.go` is 271 lines: one `call()` helper, eight methods
+and about fourteen wire types. It uses eight methods of a Bot API that has well
+over a hundred — `getMe`, `sendMessage`, `editMessageText`,
+`answerCallbackQuery`, `setMyCommands`, `getUpdates`, `setWebhook`,
+`deleteWebhook` — and it is the one place where exact control over HTML
+escaping matters.
+
+Callback payloads use a 22-character base64 id (`core.ID.Compact`) because
+Telegram caps `callback_data` at 64 bytes, which is not enough for two dashed
+UUIDs.
+
+### Reviewed against the alternatives, and kept
+
+The Bot API libraries worth considering are `go-telegram/bot` (zero
+dependencies, MIT, tracks the Bot API closely, listed on Telegram's own samples
+page), `mymmrac/telego` (full one-to-one coverage, but pulls fasthttp and
+go-json), `PaulSonOfLars/gotgbot` (generated from the spec) and
+`OvyFlash/telegram-bot-api` (a maintained fork of the classic
+`go-telegram-bot-api`, which has been stale since 2021 and should not be used
+for anything new).
+
+They are all good. None of them changes anything here, because their three
+selling points do not apply:
+
+- **Full API coverage** is dead weight when the bot calls eight methods.
+- **Handler and middleware routing** would replace `bot.go`'s dispatch —
+  725 lines of working code rewritten to acquire a routing style the package
+  already has. Taking only the transport means depending on a library to use
+  five per cent of it.
+- **Tracking Bot API versions** only matters for methods that are called.
+  Telegram adds fields; adding a struct tag is cheap.
+
+Against that, `go.mod` has eight direct dependencies and ships as a static
+binary in a distroless image on a 1 CPU / 1 GB host. Those are deliberate, and
+271 lines of `net/http` is a cheap thing to own.
+
+### gotd/td is a different category, not a better option
+
+`gotd/td` is a full MTProto client, not a Bot API wrapper. It can authenticate
+as a bot (`client.Auth().Bot(ctx, token)`), so it looks like a candidate, and
+it is genuinely excellent — pluggable session storage, automatic reconnects,
+FLOOD_WAIT middleware, multi-stream uploads and downloads with CDN support.
+
+Two things it would actually buy this product: updates pushed over a persistent
+connection instead of polling or a webhook, and file transfer limits orders of
+magnitude above the Bot API's — which matters for attachments, and only if
+somebody wants to attach something much larger than a photo of a receipt.
+
+What it costs is out of proportion to that:
+
+- **42 direct dependencies**, including a WebRTC stack, uTLS, OpenTelemetry,
+  zap, memguard and an NTP client. It implements voice and video calls. This
+  bot sends formatted text and edits it.
+- **A session to store.** MTProto authenticates to an auth key, not a bearer
+  token. That is new persistent state on a deployment whose entire backup story
+  is `VACUUM INTO` over one SQLite file.
+- **A new operational model** — a long-lived TCP connection with reconnects and
+  datacentre migration, replacing stateless HTTPS requests that either work or
+  return an error.
+- **Bots are still bots.** MTProto does not grant a bot anything the Bot API
+  withholds; the restrictions are on the account, not the protocol.
+
+It is the right library for a userbot, a client, or anything moving large
+files. It is the wrong one for a bot that posts a trip summary.
+
+### The gap that is real, and is ours to close
+
+The client does not read `parameters.retry_after` from a 429. `APIError` has
+`Method`, `Code` and `Description` and nothing else, so a rate-limited send
+goes to `MarkFailed`, retries on a fixed one-minute schedule, and after five
+attempts is dropped. Telegram's `retry_after` can exceed a minute, so a burst
+can lose notifications silently. Every library listed above handles this; so
+can twenty lines here, without a dependency.
+
+`client.go` also has no tests — `internal/telegram` has only `dates_test.go`.
+
+### What would change the answer
+
+Either of these, and the choice is `go-telegram/bot`, transport only, keeping
+`bot.go`'s dispatch and `views.go`:
+
+1. **File handling arrives** — `getFile`, multipart upload, `sendPhoto`. That
+   is where hand-rolling stops being cheap, and it is exactly what
+   `docs/features/04-attach-receipts-and-links.md` stage 2 needs.
+2. **Anything Telegram ships quarterly is wanted** — reactions, payments,
+   inline mode, business accounts.
+
+Zero dependencies is the differentiator that matches this project; telego's
+fasthttp tree buys throughput there is no use for here.
 
 ## Invite tokens, never trip ids
 
