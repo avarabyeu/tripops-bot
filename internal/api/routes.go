@@ -107,6 +107,7 @@ func (s *Server) routes(r chi.Router) {
 			r.Post("/expenses", s.withAccess(s.handleCreateExpense))
 			r.Patch("/expenses/{expenseID}", s.withAccess(s.handleUpdateExpense))
 			r.Delete("/expenses/{expenseID}", s.withAccess(s.handleDeleteExpense))
+			r.Get("/expenses/report", s.withAccess(s.handleExpenseReport))
 			r.Get("/balances", s.withAccess(s.handleBalances))
 			r.Post("/settlements", s.withAccess(s.handleCreateSettlement))
 			r.Post("/settlements/{settlementID}/settle", s.withAccess(s.handleSettle))

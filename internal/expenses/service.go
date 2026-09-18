@@ -278,6 +278,23 @@ func (s *Service) Balances(ctx context.Context, access trips.Access) (BalanceRep
 	}, nil
 }
 
+// Report is the full ledger: totals, a breakdown by category, and each
+// person's paid/share/balance position.
+//
+// It reuses the balances query rather than adding SQL of its own, so the
+// report and the "who owes whom" screen are guaranteed to agree.
+func (s *Service) Report(ctx context.Context, access trips.Access) (Report, error) {
+	list, err := s.List(ctx, access)
+	if err != nil {
+		return Report{}, err
+	}
+	balances, err := s.repo.Balances(ctx, access.Trip.ID)
+	if err != nil {
+		return Report{}, err
+	}
+	return BuildReport(list, balances, access.Trip.Currency), nil
+}
+
 // SettlementInput records a transfer between two members.
 type SettlementInput struct {
 	From   core.ID    `json:"from_member_id"`

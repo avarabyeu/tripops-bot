@@ -70,6 +70,37 @@ transfer happened. Only `settled` rows move a balance; `pending` ones are plans.
 The UI says so in as many words, because a button next to an amount invites the
 assumption that it pays.
 
+## The report and the balances are two questions, one source
+
+`GET /balances` answers "what do I do next" — pay Anna €40. `GET
+/expenses/report` answers "what happened" — you put in €150, your share came to
+€120, so you are €30 up, and here is where the group's money went.
+
+They are separate screens because the answers are used at different moments,
+but the report does not compute anything about money a second time: it calls
+the same balances query and restates each figure alongside the paid and share
+numbers it was derived from. Only the counts — how many bills a person paid,
+how many they are on — are computed in the report, from the expense list. An
+independent re-derivation would be two implementations of "what does everyone
+owe", and the day they disagreed the ledger would stop being trustworthy.
+
+The one number in the report that is not a balance is `per_person_minor`: the
+total divided by the number of people. It is the average cost of the trip, not
+what anybody owes, and the UI labels it that way.
+
+## Expenses can be edited and deleted, by the person who recorded them
+
+Not because typos happen — because the split goes stale. A room booked for
+three, split three ways, is wrong the moment a fourth person joins, and the
+person who recorded it is the one who knows. Sending the participant list in a
+`PATCH` replaces the whole split and recomputes the shares, so re-splitting is
+one action rather than delete-and-retype.
+
+Organisers can edit anybody's expense; everybody else can only edit their own.
+Rewriting somebody else's receipt is not a thing a peer should be able to do
+quietly, and the ledger is the one part of the product where people care about
+exact numbers.
+
 ## Voting advises, organisers decide
 
 A decision closes itself at its deadline, but nothing is ever applied

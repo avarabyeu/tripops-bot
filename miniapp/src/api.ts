@@ -15,6 +15,7 @@ import type {
   Dashboard,
   Decision,
   Expense,
+  ExpenseReport,
   Invite,
   InvitePreview,
   Me,
@@ -214,7 +215,10 @@ export const api = {
       get<{ expenses: Expense[] }>(`${trip(tripId)}/expenses`).then((r) => r.expenses),
     create: (tripId: string, input: Record<string, unknown>) =>
       post<Expense>(`${trip(tripId)}/expenses`, input),
+    update: (tripId: string, id: string, input: Record<string, unknown>) =>
+      patch<Expense>(`${trip(tripId)}/expenses/${id}`, input),
     remove: (tripId: string, id: string) => del(`${trip(tripId)}/expenses/${id}`),
+    report: (tripId: string) => get<ExpenseReport>(`${trip(tripId)}/expenses/report`),
     balances: (tripId: string) => get<BalanceReport>(`${trip(tripId)}/balances`),
     settle: (tripId: string, input: { from_member_id: string; to_member_id: string; amount_minor: number }) =>
       post<Settlement>(`${trip(tripId)}/settlements`, input),

@@ -160,6 +160,36 @@ export interface Expense {
   participants: { member_id: string; display_name?: string; share_minor: number }[];
 }
 
+/** One person's line in the expense report. */
+export interface MemberSummary {
+  member_id: string;
+  display_name: string;
+  paid_minor: number;
+  paid_count: number;
+  share_minor: number;
+  share_count: number;
+  settled_minor: number;
+  balance_minor: number;
+}
+
+export interface CategoryTotal {
+  category: ExpenseCategory;
+  total_minor: number;
+  count: number;
+  percent: number;
+}
+
+/** The whole ledger: what the trip cost, where it went, where everyone stands. */
+export interface ExpenseReport {
+  currency: string;
+  total_minor: number;
+  count: number;
+  per_person_minor: number;
+  by_category: CategoryTotal[];
+  members: MemberSummary[];
+  expenses: Expense[];
+}
+
 export interface Balance {
   member_id: string;
   display_name: string;

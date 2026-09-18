@@ -2,11 +2,12 @@ import { useState } from "react";
 import { api, ApiError } from "../api";
 import { CATEGORY_ICONS, CATEGORY_NAMES, dayIn, money, parseMoney } from "../format";
 import { useNavigation, useParam } from "../router";
+import { confirm } from "../telegram";
 import { useAsync } from "../useAsync";
 import { Loaded, Screen } from "../components/Screen";
 import { AsyncButton, Button, Card, Chip, Empty, Field, Sheet } from "../components/ui";
 import { useSuggestedName } from "../useSuggestedName";
-import type { ExpenseCategory, Member } from "../types";
+import type { Expense, ExpenseCategory, Member } from "../types";
 
 const CATEGORIES: ExpenseCategory[] = [
   "fuel",
@@ -27,10 +28,12 @@ export function Expenses() {
   const expenses = useAsync(() => api.expenses.list(tripId), [tripId]);
   const members = useAsync(() => api.members.list(tripId), [tripId]);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Expense | undefined>();
 
   const currency = trip.data?.trip.currency ?? "EUR";
   const timezone = trip.data?.trip.timezone ?? "UTC";
   const total = (expenses.data ?? []).reduce((sum, e) => sum + e.amount_minor, 0);
+  const active = (members.data ?? []).filter((m) => m.status === "active");
 
   return (
     <Screen
@@ -54,7 +57,10 @@ export function Expenses() {
           ) : (
             <div className="stack tight">
               {list.map((expense) => (
-                <Card key={expense.id} tight>
+                // Tapping an expense opens it for editing. Splits go stale —
+                // somebody joins the trip after the room is booked — so this
+                // is a normal thing to do, not a buried correction.
+                <Card key={expense.id} tight onClick={() => setEditing(expense)}>
                   <div className="card-row">
                     <div>
                       <div className="title">
@@ -75,20 +81,44 @@ export function Expenses() {
       </Loaded>
 
       <div className="bottom-action">
-        <Button block variant="secondary" onClick={() => nav.push({ name: "balances", params: { tripId } })}>
-          ⚖️ Who owes whom
-        </Button>
+        <div className="pair">
+          <Button
+            block
+            variant="secondary"
+            onClick={() => nav.push({ name: "expense-report", params: { tripId } })}
+          >
+            📊 Report
+          </Button>
+          <Button block variant="secondary" onClick={() => nav.push({ name: "balances", params: { tripId } })}>
+            ⚖️ Who owes whom
+          </Button>
+        </div>
       </div>
 
       {adding && members.data && trip.data && (
-        <AddExpenseSheet
+        <ExpenseSheet
           tripId={tripId}
           currency={currency}
-          members={members.data.filter((m) => m.status === "active")}
+          members={active}
           defaultPayer={trip.data.me.id}
           onClose={() => setAdding(false)}
-          onCreated={() => {
+          onDone={() => {
             setAdding(false);
+            expenses.reload();
+          }}
+        />
+      )}
+
+      {editing && members.data && trip.data && (
+        <ExpenseSheet
+          tripId={tripId}
+          currency={currency}
+          members={active}
+          defaultPayer={trip.data.me.id}
+          expense={editing}
+          onClose={() => setEditing(undefined)}
+          onDone={() => {
+            setEditing(undefined);
             expenses.reload();
           }}
         />
@@ -98,30 +128,41 @@ export function Expenses() {
 }
 
 /**
- * Adding an expense is the most-used form in the app, so it defaults
- * aggressively: you paid, everyone splits it equally, today.
+ * One form for adding and for editing.
+ *
+ * Adding is the most-used form in the app, so it defaults aggressively: you
+ * paid, everyone splits it equally, today. Editing starts from the expense as
+ * recorded — including who it was split between, which is the field people
+ * come back to change.
  */
-function AddExpenseSheet({
+function ExpenseSheet({
   tripId,
   currency,
   members,
   defaultPayer,
+  expense,
   onClose,
-  onCreated,
+  onDone,
 }: {
   tripId: string;
   currency: string;
   members: Member[];
   defaultPayer: string;
+  expense?: Expense;
   onClose: () => void;
-  onCreated: () => void;
+  onDone: () => void;
 }) {
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState<ExpenseCategory>("fuel");
+  const editing = expense !== undefined;
+  const [amount, setAmount] = useState(expense ? (expense.amount_minor / 100).toFixed(2) : "");
+  const [category, setCategory] = useState<ExpenseCategory>(expense?.category ?? "fuel");
   // Picking a category names the expense; most are exactly "Fuel" or "Food".
-  const title = useSuggestedName(CATEGORY_NAMES.fuel ?? "");
-  const [payer, setPayer] = useState(defaultPayer);
-  const [participants, setParticipants] = useState<string[]>(members.map((m) => m.id));
+  // An expense that already has a name keeps it: suggest() only fills a field
+  // the user has not made theirs, and editing means they already did.
+  const title = useSuggestedName(expense?.title ?? CATEGORY_NAMES.fuel ?? "");
+  const [payer, setPayer] = useState(expense?.paid_by ?? defaultPayer);
+  const [participants, setParticipants] = useState<string[]>(
+    expense ? expense.participants.map((p) => p.member_id) : members.map((m) => m.id),
+  );
   const [error, setError] = useState<ApiError | undefined>();
 
   const minor = parseMoney(amount);
@@ -139,16 +180,38 @@ function AddExpenseSheet({
 
   const submit = async () => {
     setError(undefined);
+    // Sending the split every time, edit included, is what re-splits a bill
+    // between a group that has since grown: the backend replaces the whole
+    // participant list and recomputes the shares from it.
+    //
+    // Always "equal", because that is the only split this form can express.
+    // Uneven splits exist in the API and are warned about above rather than
+    // silently flattened on save.
+    const body = {
+      title: title.value,
+      amount_minor: minor,
+      category,
+      paid_by: payer,
+      split_type: "equal",
+      participants: participants.map((id) => ({ member_id: id })),
+    };
     try {
-      await api.expenses.create(tripId, {
-        title: title.value,
-        amount_minor: minor,
-        category,
-        paid_by: payer,
-        split_type: "equal",
-        participants: participants.map((id) => ({ member_id: id })),
-      });
-      onCreated();
+      if (expense) await api.expenses.update(tripId, expense.id, body);
+      else await api.expenses.create(tripId, body);
+      onDone();
+    } catch (err) {
+      if (err instanceof ApiError) setError(err);
+      else throw err;
+    }
+  };
+
+  const remove = async () => {
+    if (!expense) return;
+    if (!(await confirm(`Delete "${expense.title}"? Everyone's balance changes.`))) return;
+    setError(undefined);
+    try {
+      await api.expenses.remove(tripId, expense.id);
+      onDone();
     } catch (err) {
       if (err instanceof ApiError) setError(err);
       else throw err;
@@ -156,7 +219,7 @@ function AddExpenseSheet({
   };
 
   return (
-    <Sheet title="Add an expense" onClose={onClose}>
+    <Sheet title={editing ? "Edit expense" : "Add an expense"} onClose={onClose}>
       {/* Category first, so the name below is usually already filled in. */}
       <Field label="Category">
         <div className="row wrap">
@@ -176,7 +239,7 @@ function AddExpenseSheet({
           onChange={(e) => setAmount(e.target.value)}
           inputMode="decimal"
           placeholder="120.00"
-          autoFocus
+          autoFocus={!editing}
         />
       </Field>
       <Field label="Who paid?" error={error?.fields.paid_by}>
@@ -203,10 +266,20 @@ function AddExpenseSheet({
           shares always add back up to the total.
         </p>
       )}
+      {editing && expense.split_type !== "equal" && (
+        <p className="field-error">
+          This expense was split unevenly. Saving here divides it equally instead.
+        </p>
+      )}
       {error && !Object.keys(error.fields).length && <span className="field-error">{error.message}</span>}
       <AsyncButton block onClick={submit} disabled={!valid}>
-        Add expense
+        {editing ? "Save changes" : "Add expense"}
       </AsyncButton>
+      {editing && (
+        <AsyncButton block variant="danger" onClick={remove}>
+          Delete expense
+        </AsyncButton>
+      )}
     </Sheet>
   );
 }

@@ -5,6 +5,7 @@ import { Accommodation } from "./screens/Accommodation";
 import { Balances } from "./screens/Balances";
 import { Checklists } from "./screens/Checklists";
 import { Decisions } from "./screens/Decisions";
+import { ExpenseReport } from "./screens/ExpenseReport";
 import { Expenses } from "./screens/Expenses";
 import { Join } from "./screens/Join";
 import { Logistics } from "./screens/Logistics";
@@ -23,6 +24,7 @@ const SCREENS: Record<string, () => React.ReactElement> = {
   accommodation: Accommodation,
   decisions: Decisions,
   expenses: Expenses,
+  "expense-report": ExpenseReport,
   balances: Balances,
   checklists: Checklists,
   settings: Settings,

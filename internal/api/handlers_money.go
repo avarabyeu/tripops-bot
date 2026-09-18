@@ -63,6 +63,14 @@ func (s *Server) handleDeleteExpense(w http.ResponseWriter, r *http.Request, acc
 
 // ---------------------------------------------------------------- balances --
 
+func (s *Server) handleExpenseReport(w http.ResponseWriter, r *http.Request, access trips.Access) error {
+	report, err := s.svc.Expenses.Report(r.Context(), access)
+	if err != nil {
+		return err
+	}
+	return httpx.JSON(w, http.StatusOK, report)
+}
+
 func (s *Server) handleBalances(w http.ResponseWriter, r *http.Request, access trips.Access) error {
 	report, err := s.svc.Expenses.Balances(r.Context(), access)
 	if err != nil {

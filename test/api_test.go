@@ -471,3 +471,219 @@ func TestAPIDeleteTrip(t *testing.T) {
 		}
 	}
 }
+
+// TestAPIExpenseReport checks the report against the balances endpoint.
+//
+// The two are computed from the same shares, and the point of the test is that
+// they stay that way: the report restates the balance next to the paid and
+// share figures it came from, so a drift between them would show up as a
+// person whose numbers do not reconcile.
+func TestAPIExpenseReport(t *testing.T) {
+	server, _ := newServer(t)
+	alice := newClient(t, server, 7301, "Alice")
+	bob := newClient(t, server, 7302, "Bob")
+
+	var trip struct {
+		ID string `json:"id"`
+	}
+	alice.do(http.MethodPost, "/api/v1/trips", map[string]any{
+		"title": "Brevet", "start_date": "2026-05-01", "end_date": "2026-05-03",
+	}, http.StatusCreated, &trip)
+
+	var invite struct {
+		Token string `json:"token"`
+	}
+	alice.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/invites", map[string]any{}, http.StatusCreated, &invite)
+	bob.do(http.MethodPost, "/api/v1/invites/"+invite.Token+"/join", nil, http.StatusOK, nil)
+
+	// Alice fuels the car, Bob books the room: 30.00 and 90.00, split evenly.
+	alice.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/expenses", map[string]any{
+		"title": "Fuel", "amount_minor": 3000, "category": "fuel",
+	}, http.StatusCreated, nil)
+	bob.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/expenses", map[string]any{
+		"title": "Hotel", "amount_minor": 9000, "category": "accommodation",
+	}, http.StatusCreated, nil)
+
+	var report struct {
+		Currency   string `json:"currency"`
+		Total      int64  `json:"total_minor"`
+		Count      int    `json:"count"`
+		PerPerson  int64  `json:"per_person_minor"`
+		ByCategory []struct {
+			Category string `json:"category"`
+			Total    int64  `json:"total_minor"`
+			Count    int    `json:"count"`
+			Percent  int    `json:"percent"`
+		} `json:"by_category"`
+		Members []struct {
+			MemberID    string `json:"member_id"`
+			DisplayName string `json:"display_name"`
+			Paid        int64  `json:"paid_minor"`
+			PaidCount   int    `json:"paid_count"`
+			Share       int64  `json:"share_minor"`
+			ShareCount  int    `json:"share_count"`
+			Balance     int64  `json:"balance_minor"`
+		} `json:"members"`
+		Expenses []struct {
+			Title string `json:"title"`
+		} `json:"expenses"`
+	}
+	bob.do(http.MethodGet, "/api/v1/trips/"+trip.ID+"/expenses/report", nil, http.StatusOK, &report)
+
+	if report.Total != 12000 || report.Count != 2 {
+		t.Fatalf("total = %d over %d expenses, want 12000 over 2", report.Total, report.Count)
+	}
+	if report.PerPerson != 6000 {
+		t.Errorf("per person = %d, want 6000", report.PerPerson)
+	}
+	if report.Currency != "EUR" {
+		t.Errorf("currency = %q", report.Currency)
+	}
+	if len(report.Expenses) != 2 {
+		t.Errorf("report carries %d expenses, want 2", len(report.Expenses))
+	}
+
+	// Accommodation is the larger of the two, so it leads the breakdown.
+	if len(report.ByCategory) != 2 {
+		t.Fatalf("categories = %+v", report.ByCategory)
+	}
+	if report.ByCategory[0].Category != "accommodation" || report.ByCategory[0].Percent != 75 {
+		t.Errorf("top category = %+v, want accommodation at 75%%", report.ByCategory[0])
+	}
+
+	// Bob paid 90.00 and owes 60.00, so the group owes him 30.00; Alice the
+	// mirror of that. The balances endpoint must say the same.
+	var balances struct {
+		Balances []struct {
+			MemberID string `json:"member_id"`
+			Paid     int64  `json:"paid_minor"`
+			Owed     int64  `json:"owed_minor"`
+			Amount   int64  `json:"balance_minor"`
+		} `json:"balances"`
+	}
+	bob.do(http.MethodGet, "/api/v1/trips/"+trip.ID+"/balances", nil, http.StatusOK, &balances)
+
+	if len(report.Members) != len(balances.Balances) {
+		t.Fatalf("report lists %d people, balances %d", len(report.Members), len(balances.Balances))
+	}
+	byID := map[string]struct {
+		paid, owed, balance int64
+	}{}
+	for _, b := range balances.Balances {
+		byID[b.MemberID] = struct{ paid, owed, balance int64 }{b.Paid, b.Owed, b.Amount}
+	}
+	for _, m := range report.Members {
+		want, ok := byID[m.MemberID]
+		if !ok {
+			t.Fatalf("%s is in the report but not in the balances", m.DisplayName)
+		}
+		if m.Paid != want.paid || m.Share != want.owed || m.Balance != want.balance {
+			t.Errorf("%s: report says paid=%d share=%d balance=%d, balances say %d/%d/%d",
+				m.DisplayName, m.Paid, m.Share, m.Balance, want.paid, want.owed, want.balance)
+		}
+		// Whatever anyone paid or owes, the arithmetic has to close.
+		if m.Paid-m.Share != m.Balance {
+			t.Errorf("%s: %d paid minus %d share is not %d", m.DisplayName, m.Paid, m.Share, m.Balance)
+		}
+		if m.PaidCount != 1 || m.ShareCount != 2 {
+			t.Errorf("%s: paid %d bills and is on %d, want 1 and 2", m.DisplayName, m.PaidCount, m.ShareCount)
+		}
+	}
+	if report.Members[0].Balance < report.Members[1].Balance {
+		t.Errorf("members are not ordered creditor-first: %+v", report.Members)
+	}
+}
+
+// TestAPIEditExpenseAfterSomeoneJoins covers the reason editing exists: a bill
+// was split between the people who were on the trip at the time, and then
+// somebody else turned up.
+func TestAPIEditExpenseAfterSomeoneJoins(t *testing.T) {
+	server, _ := newServer(t)
+	alice := newClient(t, server, 7311, "Alice")
+	bob := newClient(t, server, 7312, "Bob")
+	cara := newClient(t, server, 7313, "Cara")
+
+	var trip struct {
+		ID string `json:"id"`
+	}
+	alice.do(http.MethodPost, "/api/v1/trips", map[string]any{
+		"title": "Brevet", "start_date": "2026-05-01", "end_date": "2026-05-03",
+	}, http.StatusCreated, &trip)
+
+	var invite struct {
+		Token string `json:"token"`
+	}
+	alice.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/invites", map[string]any{}, http.StatusCreated, &invite)
+	bob.do(http.MethodPost, "/api/v1/invites/"+invite.Token+"/join", nil, http.StatusOK, nil)
+
+	type expenseBody struct {
+		ID           string `json:"id"`
+		Amount       int64  `json:"amount_minor"`
+		Title        string `json:"title"`
+		Participants []struct {
+			MemberID string `json:"member_id"`
+			Share    int64  `json:"share_minor"`
+		} `json:"participants"`
+	}
+	var expense expenseBody
+	alice.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/expenses", map[string]any{
+		"title": "Hotel", "amount_minor": 9000, "category": "accommodation",
+	}, http.StatusCreated, &expense)
+	if len(expense.Participants) != 2 {
+		t.Fatalf("split between %d people, want 2", len(expense.Participants))
+	}
+
+	// Cara joins after the room was booked.
+	cara.do(http.MethodPost, "/api/v1/invites/"+invite.Token+"/join", nil, http.StatusOK, nil)
+	var roster struct {
+		Members []struct {
+			ID          string `json:"id"`
+			DisplayName string `json:"display_name"`
+		} `json:"members"`
+	}
+	alice.do(http.MethodGet, "/api/v1/trips/"+trip.ID+"/members", nil, http.StatusOK, &roster)
+	if len(roster.Members) != 3 {
+		t.Fatalf("members = %+v", roster.Members)
+	}
+	all := make([]map[string]any, 0, len(roster.Members))
+	for _, m := range roster.Members {
+		all = append(all, map[string]any{"member_id": m.ID})
+	}
+
+	// Alice re-splits it three ways.
+	var updated expenseBody
+	alice.do(http.MethodPatch, "/api/v1/trips/"+trip.ID+"/expenses/"+expense.ID, map[string]any{
+		"participants": all,
+	}, http.StatusOK, &updated)
+	if len(updated.Participants) != 3 {
+		t.Fatalf("still split between %d people", len(updated.Participants))
+	}
+	var sum int64
+	for _, p := range updated.Participants {
+		if p.Share != 3000 {
+			t.Errorf("share = %d, want 3000", p.Share)
+		}
+		sum += p.Share
+	}
+	if sum != updated.Amount {
+		t.Errorf("shares add up to %d but the expense is %d", sum, updated.Amount)
+	}
+
+	// Bob did not record it and is not an organiser, so it is not his to edit
+	// or to remove.
+	bob.do(http.MethodPatch, "/api/v1/trips/"+trip.ID+"/expenses/"+expense.ID, map[string]any{
+		"title": "Not Bob's to rename",
+	}, http.StatusForbidden, nil)
+	bob.do(http.MethodDelete, "/api/v1/trips/"+trip.ID+"/expenses/"+expense.ID, nil, http.StatusForbidden, nil)
+
+	// Alice deletes it, and the ledger empties with it.
+	alice.do(http.MethodDelete, "/api/v1/trips/"+trip.ID+"/expenses/"+expense.ID, nil, http.StatusNoContent, nil)
+	var report struct {
+		Total int64 `json:"total_minor"`
+		Count int   `json:"count"`
+	}
+	alice.do(http.MethodGet, "/api/v1/trips/"+trip.ID+"/expenses/report", nil, http.StatusOK, &report)
+	if report.Total != 0 || report.Count != 0 {
+		t.Errorf("report after deleting the only expense = %+v", report)
+	}
+}

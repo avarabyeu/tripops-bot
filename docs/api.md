@@ -164,6 +164,7 @@ the text or the assignee of a shared item is an organiser action.
 | --- | --- | --- |
 | `GET`/`POST` | `/trips/{tripID}/expenses` | member — everybody pays for something |
 | `PATCH`/`DELETE` | `/trips/{tripID}/expenses/{expenseID}` | whoever recorded it, or admin |
+| `GET` | `/trips/{tripID}/expenses/report` | member — the whole ledger in one call |
 | `GET` | `/trips/{tripID}/balances` | member — balances, suggested transfers, settlements |
 | `POST` | `/trips/{tripID}/settlements` | either party, or admin |
 | `POST` | `/trips/{tripID}/settlements/{settlementID}/settle` | either party, or admin |
@@ -187,8 +188,43 @@ Creating an expense:
 points. Either way they must add up exactly, and the response echoes the
 resolved per-member shares.
 
+Editing an expense replaces the whole split when `participants` is present,
+which is the point of it: a bill divided between the people who were on the
+trip at the time goes stale the moment somebody else joins.
+
 `GET /balances` returns the suggested transfers already minimised — see
 `docs/product-decisions.md` for the algorithm.
+
+`GET /expenses/report` answers the other question — not "what should I do
+next" but "what happened":
+
+```json
+{
+  "currency": "EUR",
+  "total_minor": 36000,
+  "count": 3,
+  "per_person_minor": 12000,
+  "by_category": [{ "category": "accommodation", "total_minor": 21000, "count": 1, "percent": 58 }],
+  "members": [
+    {
+      "member_id": "…",
+      "display_name": "Ann",
+      "paid_minor": 15000,
+      "paid_count": 2,
+      "share_minor": 13000,
+      "share_count": 3,
+      "settled_minor": 0,
+      "balance_minor": 2000
+    }
+  ],
+  "expenses": [ "…the same objects as GET /expenses, shares included…" ]
+}
+```
+
+`balance_minor` is the same figure `GET /balances` reports, restated next to
+the paid and share numbers it came from: the report reuses that query rather
+than deriving the amounts a second way. `per_person_minor` is the average cost
+of the trip, which is not what anybody owes unless every bill was split evenly.
 
 ### Attachments
 

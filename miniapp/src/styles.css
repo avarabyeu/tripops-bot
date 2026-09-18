@@ -586,3 +586,17 @@ select:focus {
   max-width: 720px;
   width: 100%;
 }
+
+/* Two peer actions side by side. Stacked they would take a third of a phone
+   screen, and neither is the primary one. */
+.bottom-action .pair {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 720px;
+}
+
+.bottom-action .pair .btn {
+  flex: 1;
+  min-width: 0;
+}
