@@ -126,12 +126,15 @@ func Decode[T any](r *http.Request, v *T) error {
 }
 
 // PathID reads a {name} path parameter as an ID.
+//
+// Either spelling is accepted: ids reach clients in the canonical form, but a
+// Telegram deep link carries the 22-character compact one.
 func PathID(r *http.Request, name string) (core.ID, error) {
 	raw := PathParam(r, name)
 	if raw == "" {
 		return core.Nil, core.Invalid("%s is required", name)
 	}
-	id, err := core.ParseID(raw)
+	id, err := core.ParseCompactID(raw)
 	if err != nil {
 		return core.Nil, core.Invalid("%s is not a valid id", name)
 	}
@@ -154,7 +157,7 @@ func QueryID(r *http.Request, name string) (core.ID, error) {
 	if raw == "" {
 		return core.Nil, nil
 	}
-	id, err := core.ParseID(raw)
+	id, err := core.ParseCompactID(raw)
 	if err != nil {
 		return core.Nil, core.Invalid("%s is not a valid id", name)
 	}

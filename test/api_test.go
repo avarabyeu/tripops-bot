@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/avarabyeu/tripops-bot/internal/auth"
+	"github.com/avarabyeu/tripops-bot/internal/core"
 	"github.com/avarabyeu/tripops-bot/internal/testsupport"
 )
 
@@ -333,4 +334,63 @@ func TestAPIExpensesAndSettlement(t *testing.T) {
 			t.Errorf("%s is at %d after settling", b.DisplayName, b.Amount)
 		}
 	}
+}
+
+// TestAPIAcceptsCompactTripIDs covers the path a Telegram deep link takes.
+//
+// The bot builds "📱 Open in app" as `?startapp=trip_<compact id>` — the 22
+// character form, because callback payloads are capped at 64 bytes — and the
+// Mini App passes whatever it was launched with straight to the API. Parsing
+// only the canonical form meant every trip opened from a bot message failed
+// with "tripID is not a valid id".
+func TestAPIAcceptsCompactTripIDs(t *testing.T) {
+	server, _ := newServer(t)
+	organiser := newClient(t, server, 7301, "Organiser")
+
+	var trip struct {
+		ID string `json:"id"`
+	}
+	organiser.do(http.MethodPost, "/api/v1/trips", map[string]any{
+		"title": "Brevet", "start_date": "2026-09-23", "end_date": "2026-09-24",
+	}, http.StatusCreated, &trip)
+
+	id, err := core.ParseID(trip.ID)
+	if err != nil {
+		t.Fatalf("the API returned an unparseable id %q: %v", trip.ID, err)
+	}
+	compact := id.Compact()
+	if len(compact) != 22 || compact == trip.ID {
+		t.Fatalf("compact id = %q; expected the short form", compact)
+	}
+
+	// Both spellings reach the same trip.
+	for name, path := range map[string]string{
+		"canonical": "/api/v1/trips/" + trip.ID,
+		"compact":   "/api/v1/trips/" + compact,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var got struct {
+				Trip struct {
+					ID    string `json:"id"`
+					Title string `json:"title"`
+				} `json:"trip"`
+			}
+			organiser.do(http.MethodGet, path, nil, http.StatusOK, &got)
+			if got.Trip.Title != "Brevet" {
+				t.Errorf("title = %q", got.Trip.Title)
+			}
+			// Whichever way it was addressed, the id handed back is canonical.
+			if got.Trip.ID != trip.ID {
+				t.Errorf("id came back as %q, want the canonical %q", got.Trip.ID, trip.ID)
+			}
+		})
+	}
+
+	// Nested routes too, since the Mini App builds every later call from the
+	// id it was launched with.
+	organiser.do(http.MethodGet, "/api/v1/trips/"+compact+"/dashboard", nil, http.StatusOK, nil)
+	organiser.do(http.MethodGet, "/api/v1/trips/"+compact+"/members", nil, http.StatusOK, nil)
+
+	// Nonsense is still nonsense.
+	organiser.do(http.MethodGet, "/api/v1/trips/not-an-id", nil, http.StatusBadRequest, nil)
 }

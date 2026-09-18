@@ -105,7 +105,11 @@ func (s *Server) tripAccess(next http.Handler) http.Handler {
 			httpx.WriteError(w, r, s.log, err)
 			return
 		}
-		tripID, err := core.ParseID(chi.URLParam(r, "tripID"))
+		// ParseCompactID, not ParseID: a deep link from the bot carries the
+		// 22-character compact form (?startapp=trip_<id>), and the Mini App
+		// passes whatever it was launched with straight through. The compact
+		// parser accepts the canonical form too, so both work.
+		tripID, err := core.ParseCompactID(chi.URLParam(r, "tripID"))
 		if err != nil {
 			httpx.WriteError(w, r, s.log, core.Invalid("tripID is not a valid id"))
 			return
@@ -147,7 +151,7 @@ func memberIDParam(raw string, self core.ID) (core.ID, error) {
 	if raw == "" {
 		return self, nil
 	}
-	id, err := core.ParseID(raw)
+	id, err := core.ParseCompactID(raw)
 	if err != nil {
 		return core.Nil, core.Invalid("member_id is not a valid id")
 	}
