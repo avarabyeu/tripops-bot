@@ -1,6 +1,6 @@
 ---
 name: backend-developer
-description: Use for implementing or changing Go backend features in TripOps — a domain module, a repository, an API route, the Telegram adapter, the scheduler, or a migration. Handles the full vertical slice: domain logic, data access, transport, and the tests that go with it. Use PROACTIVELY when a task involves editing anything under internal/, cmd/ or migrations/.
+description: Use for implementing or changing Go backend features in TripOps — a domain module, a repository, an API route, the Telegram adapter, the scheduler, or a migration. Handles the full vertical slice — domain logic, data access, transport, and the tests that go with it. Use PROACTIVELY when a task involves editing anything under internal/, cmd/ or migrations/.
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: sonnet
 ---

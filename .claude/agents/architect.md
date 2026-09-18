@@ -1,6 +1,6 @@
 ---
 name: architect
-description: Use to turn a product-owner feature request into a technical specification a developer can implement without making architectural decisions of their own — schema, module boundaries, API surface, ordered tasks. Also use for standalone technical questions with no feature attached: whether to take a dependency, whether a change needs a migration, whether something belongs in a service or an adapter. Use PROACTIVELY before implementing anything that touches more than one module, adds a table, or changes how the bot and the Mini App see the same data.
+description: Use to turn a product-owner feature request into a technical specification a developer can implement without making architectural decisions of their own — schema, module boundaries, API surface, ordered tasks. Also use for standalone technical questions with no feature attached — whether to take a dependency, whether a change needs a migration, whether something belongs in a service or an adapter. Use PROACTIVELY before implementing anything that touches more than one module, adds a table, or changes how the bot and the Mini App see the same data.
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: opus
 ---

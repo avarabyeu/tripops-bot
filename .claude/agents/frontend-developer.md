@@ -1,6 +1,6 @@
 ---
 name: frontend-developer
-description: Use for anything under miniapp/ — a new screen, a form, the API client, types, styles, or the router. Handles the whole slice: the type, the api.ts method, the screen and its loading, empty and error states. Use PROACTIVELY when a backend change adds or alters a field the Mini App reads, because types.ts mirrors the Go JSON tags and drifts silently otherwise.
+description: Use for anything under miniapp/ — a new screen, a form, the API client, types, styles, or the router. Handles the whole slice — the type, the api.ts method, the screen and its loading, empty and error states. Use PROACTIVELY when a backend change adds or alters a field the Mini App reads, because types.ts mirrors the Go JSON tags and drifts silently otherwise.
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: sonnet
 ---
