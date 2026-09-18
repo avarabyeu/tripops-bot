@@ -89,8 +89,15 @@ computed, it does not re-derive anything. **Time** — "the trip is over" is a
 calendar date in the trip's timezone, not an instant, so a trip ending Sunday
 nudges on Monday morning local, not at midnight UTC.
 
-## Open questions
+## Resolved while building
 
-What hour the reminder goes out. Suggest 09:00 in the trip's timezone; the
-event reminders already pick a local hour and this should match whatever they
-do rather than invent a second convention.
+**The hour.** 09:00 in the trip's timezone. There was no existing local-hour
+convention to match — the pre-trip reminders fire on whichever tick the day
+turns on, which is 00:00 UTC — so this rule sets one rather than inheriting a
+midnight ping for a message about somebody's money.
+
+**The category.** Not `expenses`, as this document assumed. That category is
+the firehose — a ping for every bill anybody records — and it is the one
+category that defaults to *off*, so the nudge would have reached nobody. It
+goes out under `reminders`, which already means "a one-off, time-triggered
+message", and the Settings hint was widened to say so.

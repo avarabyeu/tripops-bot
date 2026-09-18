@@ -90,6 +90,7 @@ func runServe(ctx context.Context, cmd *cli.Command) error {
 		Vehicles:      logisticsSvc.Repo(),
 		Accommodation: accommodationSvc.Repo(),
 		Checklists:    checklistsSvc.Repo(),
+		Expenses:      expensesSvc.Repo(),
 	})
 	dashboardSvc := dashboard.NewService(dashboard.Sources{
 		Trips:         tripsSvc,
@@ -184,6 +185,7 @@ func runServe(ctx context.Context, cmd *cli.Command) error {
 		Events:        eventsSvc.Repo(),
 		Checklists:    checklistsSvc.Repo(),
 		Accommodation: accommodationSvc.Repo(),
+		Expenses:      expensesSvc.Repo(),
 		Notify:        notifier,
 	}, log)
 	wg.Go(func() { sched.Run(ctx, cfg.SchedulerInterval) })

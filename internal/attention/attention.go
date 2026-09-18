@@ -18,6 +18,7 @@ import (
 	"github.com/avarabyeu/tripops-bot/internal/core"
 	"github.com/avarabyeu/tripops-bot/internal/decisions"
 	"github.com/avarabyeu/tripops-bot/internal/events"
+	"github.com/avarabyeu/tripops-bot/internal/expenses"
 	"github.com/avarabyeu/tripops-bot/internal/logistics"
 	"github.com/avarabyeu/tripops-bot/internal/trips"
 )
@@ -59,6 +60,7 @@ const (
 	TypeNoSeat                Type = "member_without_seat"
 	TypeNoDeparture           Type = "trip_without_departure"
 	TypeNoAccommodation       Type = "trip_without_accommodation"
+	TypeBalanceOutstanding    Type = "trip_balance_outstanding"
 )
 
 // Target points the UI at the thing that needs attention.
@@ -89,6 +91,7 @@ type Sources struct {
 	Vehicles      *logistics.Repo
 	Accommodation *accommodation.Repo
 	Checklists    *checklists.Repo
+	Expenses      *expenses.Repo
 }
 
 type Engine struct {
@@ -122,6 +125,7 @@ func (e *Engine) Evaluate(ctx context.Context, access trips.Access) []Item {
 	e.logisticsRules(ctx, access, add)
 	e.accommodationRules(ctx, access, add)
 	e.checklistRules(ctx, access, add)
+	e.moneyRules(ctx, access, now, add)
 
 	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].Mine != items[j].Mine {
@@ -366,6 +370,48 @@ func (e *Engine) checklistRules(ctx context.Context, access trips.Access, add fu
 			Description: "Items on the checklists are waiting for you.",
 			Target:      Target{Kind: "checklist"},
 		})
+	}
+}
+
+// moneyRules is the only rule that fires after the trip rather than before it.
+//
+// Every other rule here is about getting to the start line: undecided RSVPs,
+// pending votes, unconfirmed beds. They all stop mattering the moment the trip
+// begins, which is exactly when the money question appears — somebody fronted
+// the accommodation and the group chat has gone quiet.
+func (e *Engine) moneyRules(ctx context.Context, access trips.Access, now time.Time, add func(Item)) {
+	// Only once the last day has passed. Balances swing around during a trip
+	// as people pay for things, and nagging about a debt that is still being
+	// accrued is noise.
+	if !access.Trip.EndDate.Before(core.DateOf(now, access.Trip.Location())) {
+		return
+	}
+	balances, err := e.src.Expenses.Balances(ctx, access.Trip.ID)
+	if err != nil {
+		return
+	}
+	for _, b := range balances {
+		if b.MemberID != access.Member.ID || b.Amount == 0 {
+			continue
+		}
+		if b.Amount < 0 {
+			add(Item{
+				Type: TypeBalanceOutstanding, Severity: SeverityWarning, Mine: true,
+				Title:       fmt.Sprintf("You still owe %s", (-b.Amount).Format(access.Trip.Currency)),
+				Description: "The trip is over and your share has not been settled.",
+				Target:      Target{Kind: "balances"},
+			})
+			return
+		}
+		// Being owed money is not a task. It is worth knowing, and worth
+		// knowing quietly.
+		add(Item{
+			Type: TypeBalanceOutstanding, Severity: SeverityInfo, Mine: true,
+			Title:       fmt.Sprintf("The group owes you %s", b.Amount.Format(access.Trip.Currency)),
+			Description: "Nobody has recorded paying you back yet.",
+			Target:      Target{Kind: "balances"},
+		})
+		return
 	}
 }
 

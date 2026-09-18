@@ -11,7 +11,7 @@ import type { NotificationPreferences, Trip } from "../types";
 const CATEGORIES: { key: keyof NotificationPreferences; label: string; hint: string }[] = [
   { key: "trip_updates", label: "Trip updates", hint: "Somebody joins, an event moves" },
   { key: "decisions", label: "Decisions", hint: "New questions and outcomes" },
-  { key: "reminders", label: "Reminders", hint: "What is happening tomorrow" },
+  { key: "reminders", label: "Reminders", hint: "What is happening tomorrow, and settling up after" },
   { key: "checklist", label: "Checklist", hint: "Items assigned to you" },
   { key: "expenses", label: "Expenses", hint: "Every expense somebody records" },
 ];

@@ -180,6 +180,18 @@ func (s *Service) AdvanceStatuses(ctx context.Context, now time.Time) (int, erro
 	return changed, nil
 }
 
+// RecentlyEnded lists trips that finished within the given number of days, for
+// the scheduler's settle-up nudge.
+func (s *Service) RecentlyEnded(ctx context.Context, today core.Date, withinDays int) ([]Trip, error) {
+	return s.repo.RecentlyEnded(ctx, today, withinDays)
+}
+
+// MembersOf lists a trip's members without an Access, for the scheduler. Every
+// caller that represents a person must go through Members instead.
+func (s *Service) MembersOf(ctx context.Context, tripID core.ID) ([]Member, error) {
+	return s.repo.ListMembers(ctx, tripID, false)
+}
+
 // Get returns a trip the caller belongs to.
 func (s *Service) Get(ctx context.Context, tripID, userID core.ID) (Trip, error) {
 	access, err := s.Access(ctx, tripID, userID)

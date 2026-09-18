@@ -131,6 +131,7 @@ func NewApp(t *testing.T) *App {
 		Vehicles:      app.Logistics.Repo(),
 		Accommodation: app.Accommodation.Repo(),
 		Checklists:    app.Checklists.Repo(),
+		Expenses:      app.Expenses.Repo(),
 	})
 	app.Dashboard = dashboard.NewService(dashboard.Sources{
 		Trips:         app.Trips,
@@ -148,6 +149,7 @@ func NewApp(t *testing.T) *App {
 		Events:        app.Events.Repo(),
 		Checklists:    app.Checklists.Repo(),
 		Accommodation: app.Accommodation.Repo(),
+		Expenses:      app.Expenses.Repo(),
 		Notify:        app.Notify,
 	}, log)
 

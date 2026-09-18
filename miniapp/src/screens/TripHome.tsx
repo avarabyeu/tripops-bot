@@ -189,7 +189,7 @@ function Attention({ item, onOpen }: { item: AttentionItem; onOpen: () => void }
       onClick={onOpen}
       onKeyDown={(e) => e.key === "Enter" && onOpen()}
     >
-      <span>{item.severity === "critical" ? "⛔" : item.mine ? "👉" : "⚠️"}</span>
+      <span>{icon(item)}</span>
       <div>
         <div className="title" style={{ fontSize: 15 }}>
           {item.title}
@@ -198,6 +198,15 @@ function Attention({ item, onOpen }: { item: AttentionItem; onOpen: () => void }
       </div>
     </div>
   );
+}
+
+function icon(item: AttentionItem): string {
+  // Money gets its own mark. An unsettled balance is not the same kind of
+  // thing as an unconfirmed bed, and a warning triangle over it reads as an
+  // error rather than a reminder.
+  if (item.type === "trip_balance_outstanding") return "💶";
+  if (item.severity === "critical") return "⛔";
+  return item.mine ? "👉" : "⚠️";
 }
 
 /** Attention items carry where to go, so the list is actionable, not a report. */
@@ -215,6 +224,7 @@ function openTarget(
     logistics: "logistics",
     accommodation: "accommodation",
     checklist: "checklists",
+    balances: "balances",
   };
   nav.push({ name: screen[item.target.kind] ?? "trip", params: { tripId } });
 }

@@ -119,6 +119,24 @@ they get home. The status is a fact the UI reads, not an event, so the
 transition sends no notification and writes no activity entry. Saturday
 arriving is not news.
 
+## Settling up is a reminder, not an expense notification
+
+The settle-up nudge goes out under `reminders`, not `expenses`, and the
+distinction is the whole reason it works. `expenses` is the firehose — a ping
+for every bill anybody records — which is why it is the one category that
+defaults to off. A once-per-trip message sent under it would reach nobody.
+
+The nudge is a one-off, time-triggered reminder, which is what `reminders`
+already means, and it is the only rule in the scheduler that fires after a trip
+rather than before it. `UpcomingTrips` stops at the end date by design, so it
+walks its own list.
+
+It fires once per person per trip, ever, keyed without a date. Four to eight
+friends do not need a collections department, and a daily debt chaser is the
+fastest way to get a bot muted. It also waits for 09:00 in the trip's timezone:
+"You owe Anna €45.00" at midnight is a worse message than the same one over
+breakfast, and unlike the pre-trip reminders this one is never urgent.
+
 ## Voting advises, organisers decide
 
 A decision closes itself at its deadline, but nothing is ever applied

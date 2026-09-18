@@ -117,6 +117,27 @@ func (r *Repo) ListTripsForUser(ctx context.Context, userID core.ID, includeArch
 	return out, nil
 }
 
+// RecentlyEnded lists non-archived trips whose last day fell within the given
+// number of days. The scheduler uses it for the one thing that happens after a
+// trip rather than before it: settling up.
+//
+// UpcomingTrips deliberately stops at the end date, so this cannot be a flag
+// on that query. The window exists so a process that was down over the weekend
+// still sends the nudge; the dedupe key is what keeps it to one.
+func (r *Repo) RecentlyEnded(ctx context.Context, today core.Date, withinDays int) ([]Trip, error) {
+	out := []Trip{}
+	err := r.db.WithContext(ctx).
+		Where("status <> ?", string(core.TripArchived)).
+		Where("end_date < ?", today).
+		Where("end_date >= ?", today.AddDays(-withinDays)).
+		Order("end_date").
+		Find(&out).Error
+	if err != nil {
+		return nil, core.Internal(fmt.Errorf("trips: recently ended: %w", err))
+	}
+	return out, nil
+}
+
 // TripsForStatusReview lists trips whose status might no longer match their
 // dates, so the scheduler can advance them.
 //
