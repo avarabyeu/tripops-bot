@@ -27,7 +27,7 @@ vars:
   # that adds the domain and the proxy labels. DEPLOY_CONTEXT comes from
   # .env.production, so which machine this deploys to is not in the repository;
   # empty means the current Docker context.
-  DEPLOY: docker ${DEPLOY_CONTEXT:+--context "$DEPLOY_CONTEXT"} compose -f docker-compose-pg.yml -f docker-compose.deploy.yml --env-file .env.production
+  DEPLOY: docker ${DEPLOY_CONTEXT:+--context "$DEPLOY_CONTEXT"} compose -f docker-compose.yml -f docker-compose.deploy.yml --env-file .env.production
 
 env:
   # Pure Go builds everywhere: the SQLite driver needs no C toolchain, and the
@@ -237,7 +237,7 @@ tasks:
 
   deploy:up:
     dotenv: [".env.production"]
-    desc: Start the public stack (PostgreSQL + backend + Mini App behind Traefik)
+    desc: Start the public stack (backend on SQLite + Mini App behind Traefik)
     preconditions:
       - sh: test -f docker-compose.deploy.yml
         msg: "docker-compose.deploy.yml is missing — copy docker-compose.deploy.yml.example and edit it"
@@ -259,11 +259,22 @@ tasks:
     cmds:
       - "{{.DEPLOY}} logs -f backend"
 
-  deploy:psql:
+  deploy:backup:
     dotenv: [".env.production"]
-    desc: Open a psql shell on the deployed database
+    desc: Take a consistent snapshot of the deployed database and copy it here
     cmds:
-      - "{{.DEPLOY}} exec postgres psql -U tripops -d tripops"
+      # VACUUM INTO rather than a file copy: safe while the app is serving.
+      # The bind-mounted directory is the single point of failure, and this is
+      # what gets a copy off the host.
+      - |
+        set -e
+        stamp=$(date -u +%Y%m%dT%H%M%SZ)
+        out="tripops-$stamp.db"
+        # Streamed rather than written and copied out: the runtime image has no
+        # shell, so there would be nothing to delete the leftover file with.
+        {{.DEPLOY}} exec -T backend /usr/local/bin/tripops db backup --stdout > "$out"
+        echo "saved $out ($(du -h "$out" | cut -f1))"
+    silent: true
 
   deploy:webhook:
     dotenv: [".env.production"]

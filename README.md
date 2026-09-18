@@ -260,9 +260,14 @@ Both files are gitignored, so your domain, webhook secret, database password
 and deployment target stay on the host: nothing in the repository names a
 deployment.
 
-The overlay layers on `docker-compose-pg.yml` and publishes the stack through
-an **existing Traefik**, using labels rather than a proxy of its own. Set these
-in `.env.production` to match your installation:
+The overlay layers on `docker-compose.yml` — the backend on SQLite — so the
+deployed stack is **two containers and a file**. At this product's scale a
+database server earns nothing; `docker-compose-pg.yml` is still there, and
+still tested, if that changes.
+
+It publishes the stack through an **existing Traefik**, using labels rather
+than a proxy of its own. Set these in `.env.production` to match your
+installation:
 
 | Variable | What it is |
 | --- | --- |
@@ -271,6 +276,7 @@ in `.env.production` to match your installation:
 | `TRAEFIK_ENTRYPOINT` | the entrypoint that terminates TLS (often `https` or `websecure`) |
 | `TRAEFIK_CERTRESOLVER` | the ACME resolver Traefik was configured with |
 | `DEPLOY_CONTEXT` | the Docker context to deploy to; empty means the current one |
+| `DATA_DIR` | host directory holding the SQLite file; must be writable by uid 65532 |
 
 Read the first three off the running proxy rather than guessing:
 
@@ -283,8 +289,27 @@ docker --context <ctx> inspect <traefik-container> --format '{{json .Config.Cmd}
 Telegram see one origin, no preflight is needed, and the backend and database
 never join the shared network. Nothing is published on the host.
 
+`DATA_DIR` is a bind mount, and Docker does not adjust ownership on those, so
+create it once on the host before the first deploy:
+
+```bash
+mkdir -p /srv/tripops && chown 65532:65532 /srv/tripops   # 65532 = nonroot
+```
+
 Finally, tell @BotFather about it: `/setmenubutton` → your bot → the same
 HTTPS URL.
+
+### Backups
+
+That directory is the single point of failure, so get a copy off the host:
+
+```bash
+task deploy:backup        # -> tripops-<timestamp>.db in the working directory
+```
+
+It runs `tripops db backup`, which uses SQLite's `VACUUM INTO` and is safe
+while the app is serving. Do not back up by copying the file — `cp` can catch a
+write in progress and produce a snapshot that looks fine and will not open.
 
 ---
 

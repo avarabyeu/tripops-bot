@@ -62,3 +62,19 @@ rule is in the wrong place.
 Say what you changed and what you verified, with the command output that
 proves it. If you left something out, say which part and why — do not quietly
 narrow the task.
+
+## Production is the operator's, not yours
+
+**Never deploy, and never touch a production host, unless the session
+explicitly asks you to.** Not when the configuration is finished, not when
+somebody reports a blocker resolved, not when it is obviously the next step.
+Being told something is ready is information, not an instruction to act.
+
+This covers `task deploy:*`, any compose command carrying
+`docker-compose.deploy.yml`, `--env-file .env.production` or a remote
+`--context`, any `docker` command against a remote context including
+read-only ones, Telegram webhook registration, and migrations against a
+production database.
+
+Prepare the change, validate it locally, then say exactly which command the
+operator should run and what it will do — and stop there.

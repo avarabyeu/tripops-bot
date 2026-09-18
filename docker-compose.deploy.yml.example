@@ -5,20 +5,24 @@
 #   task deploy:up
 #
 # The copy is gitignored, and so is .env.production: your domain, your webhook
-# secret and your database password stay on the host. Nothing in the repository
+# secret and your deployment target stay on the host. Nothing in the repository
 # names a deployment.
 #
-# This layers on docker-compose-pg.yml and publishes the stack through an
-# existing Traefik, which already terminates TLS and redirects http to https.
-# Traefik runs with exposedbydefault=false, so a container is routed only if it
-# says so itself — that is what the labels below are.
+# This layers on docker-compose.yml — the backend on SQLite — so the deployed
+# stack is two containers and a file. For the workload this product has (one
+# process, a trip being a handful of people) a database server earns nothing;
+# docker-compose-pg.yml is still there if that ever changes.
+#
+# It publishes the stack through an existing Traefik, which already terminates
+# TLS and redirects http to https. Traefik runs with exposedbydefault=false, so
+# a container is routed only if it says so itself — that is what the labels are.
 #
 # Only the Mini App is exposed. It serves the app and proxies /api and
 # /telegram to the backend over the private network, so the browser and
 # Telegram see one origin and the backend never joins the shared network.
 
-# The deployed stack gets a name of its own, so its volumes and containers are
-# not tangled with the local PostgreSQL stack's.
+# The deployed stack gets a name of its own, so its containers are not tangled
+# with the local ones.
 name: tripops
 
 services:
@@ -46,6 +50,17 @@ services:
 
   backend:
     ports: !override []
+    # A directory on the host rather than the base file's named volume, so the
+    # database sits somewhere you chose and can be backed up with the rest of
+    # that host. `!override` replaces the base mount rather than adding to it.
+    #
+    # The directory must exist and be writable by uid 65532, the nonroot user
+    # the image runs as. Docker does not adjust ownership on a bind mount, so
+    # this is a one-time step on the host:
+    #
+    #   mkdir -p <DATA_DIR> && chown 65532:65532 <DATA_DIR>
+    volumes: !override
+      - ${DATA_DIR:?set DATA_DIR in .env.production}:/data
     environment:
       APP_ENV: production
       # Telegram delivers updates to the public URL; the secret it echoes back
@@ -55,11 +70,6 @@ services:
       MINIAPP_URL: https://${PUBLIC_DOMAIN}
       # Same origin as the Mini App, so the browser sends no preflight.
       CORS_ORIGINS: https://${PUBLIC_DOMAIN}
-
-  postgres:
-    # Reachable from the other containers and from nowhere else.
-    # `task deploy:psql` opens a shell on it.
-    ports: !override []
 
 networks:
   # The network the existing Traefik is on. Created by whatever installed

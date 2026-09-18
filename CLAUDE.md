@@ -7,6 +7,33 @@ The product promise is that anyone can open the chat, tap the trip, and
 understand its whole state in ten seconds. Every technical decision below
 serves that.
 
+## Production is the operator's, not yours
+
+**Never deploy, and never touch a production host, unless this session
+explicitly asks you to.** Not when the configuration is finished, not when a
+blocker is reported resolved, not when it is obviously the next step. Being
+told that something is ready is information, not an instruction to act on it.
+
+That covers everything that reaches a deployment or a live host:
+
+- `task deploy:*`, and any `docker compose` command carrying
+  `docker-compose.deploy.yml`, `--env-file .env.production` or a remote
+  `--context`;
+- `docker` against a remote context at all, including read-only `ps`,
+  `inspect` and `logs`;
+- registering or deleting a Telegram webhook, and anything else that changes
+  state a real user can see;
+- migrations against a production database.
+
+What you *should* do instead: prepare the change, validate it locally, say
+exactly which command the operator needs to run and what it will do. Then
+stop. If you genuinely need a fact from the live host to finish the work, ask
+for permission or ask them to run the command and paste the output.
+
+"Explicitly asks" means a request to perform the action — "deploy it", "run
+task deploy:up", "go ahead and push". It is not implied by a green light on a
+prerequisite.
+
 ## Commands
 
 Use `task` (Taskfile.yml); it is what CI runs.

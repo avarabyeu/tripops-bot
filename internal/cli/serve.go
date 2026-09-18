@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -143,6 +144,17 @@ func runServe(ctx context.Context, cmd *cli.Command) error {
 			log.Warn("could not reach Telegram", "err", err)
 		} else {
 			log.Info("telegram bot ready", "username", me.Username)
+			// Invite links are built from the configured username, so a typo
+			// here produces links that 404 in Telegram and nothing else that
+			// looks wrong. Telegram knows the real one; compare them.
+			switch {
+			case cfg.BotUsername == "":
+				log.Warn("TELEGRAM_BOT_USERNAME is not set: invite links cannot be built",
+					"expected", me.Username)
+			case !strings.EqualFold(cfg.BotUsername, me.Username):
+				log.Warn("TELEGRAM_BOT_USERNAME does not match this bot: invite links will not work",
+					"configured", cfg.BotUsername, "actual", me.Username)
+			}
 		}
 		if err := bot.Setup(ctx); err != nil {
 			log.Warn("telegram setup failed", "err", err)

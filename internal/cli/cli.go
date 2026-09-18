@@ -45,6 +45,7 @@ func New() *cli.Command {
 		Commands: []*cli.Command{
 			serveCommand(),
 			migrateCommand(),
+			dbCommand(),
 			botCommand(),
 		},
 	}
@@ -101,11 +102,14 @@ func newLogger(cfg config.Config) *slog.Logger {
 	case "error":
 		level = slog.LevelError
 	}
+	// Logs go to stderr so stdout stays a clean data channel: `db backup
+	// --stdout` streams a database through it. Docker captures both streams,
+	// so `serve` reads no differently in a container.
 	opts := &slog.HandlerOptions{Level: level}
 	if cfg.IsDevelopment() {
-		return slog.New(slog.NewTextHandler(os.Stdout, opts))
+		return slog.New(slog.NewTextHandler(os.Stderr, opts))
 	}
-	return slog.New(slog.NewJSONHandler(os.Stdout, opts))
+	return slog.New(slog.NewJSONHandler(os.Stderr, opts))
 }
 
 func buildVersion() string {

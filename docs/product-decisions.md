@@ -109,6 +109,34 @@ that the tests run on the constrained engine.
 The outbox claims rows by flipping a status and stamping `claimed_at`, with a
 five-minute staleness window, instead of `SELECT … FOR UPDATE SKIP LOCKED`.
 
+## Production runs SQLite too
+
+Not just development. One backend process, a trip being a handful of people, a
+few hundred rows: the heaviest read path is the dashboard at fourteen indexed
+queries, and writes are one-at-a-time human actions. That is orders of
+magnitude below where SQLite starts to matter, and a database server would add
+a third container, a password and an upgrade path for nothing.
+
+PostgreSQL support stays, and `docker-compose-pg.yml` with it — the integration
+suite runs against both, so the escape hatch is a tested one rather than a
+hope. What would justify taking it: more than one backend replica, or wanting
+someone else to run the database.
+
+Two things follow from the choice and are not optional:
+
+- **WAL, with `synchronous=FULL`.** WAL so readers stop blocking the writer and
+  a backup can run against a live database; FULL — SQLite's own default, set
+  explicitly so the decision is visible — because losing a committed expense to
+  a power cut is worse than an fsync nobody can measure at this write rate.
+- **`tripops db backup` uses `VACUUM INTO`.** Copying the file is not a backup:
+  `cp` can catch a write in progress and produce something that looks fine and
+  will not open. `VACUUM INTO` is safe while the process is serving.
+
+The connection pool is capped at one connection, because SQLite takes a
+database-wide write lock and more writers buy only "database is locked". Every
+query in the process therefore serialises; at sub-millisecond queries that is
+invisible, and it is the real ceiling to watch.
+
 ## golang-migrate over ORM auto-migration
 
 `AutoMigrate` cannot express a partial index, drop a column, or be reviewed in

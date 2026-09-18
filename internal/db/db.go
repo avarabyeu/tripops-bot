@@ -179,11 +179,21 @@ func DialectOf(url string) Dialect {
 }
 
 // SQLiteDSN turns a configured URL into what the driver expects, and applies
-// the two pragmas the schema depends on.
+// the pragmas the schema and the operations story depend on.
 //
-// Foreign keys are off by default in SQLite and the schema relies on them, so
-// enabling them is not optional. busy_timeout turns the "database is locked"
-// error that a concurrent writer would otherwise get into a short wait.
+//   - foreign_keys: off by default in SQLite, and the schema relies on them,
+//     so enabling them is not optional.
+//   - busy_timeout: turns the "database is locked" error a concurrent writer
+//     would otherwise get into a short wait.
+//   - journal_mode=WAL: readers stop blocking the writer, and `tripops db
+//     backup` can snapshot a live database. A no-op for :memory:, which simply
+//     reports "memory".
+//   - synchronous=FULL: SQLite's own default, stated rather than inherited so
+//     the durability choice is visible. No committed transaction is lost to an
+//     OS crash or a power cut; the extra fsync costs nothing at the handful of
+//     writes a minute this product generates.
+//
+// Anything the caller already set in the URL is left alone.
 func SQLiteDSN(url string) string {
 	dsn := url
 	for _, prefix := range []string{"sqlite://", "sqlite3://"} {
@@ -195,6 +205,8 @@ func SQLiteDSN(url string) string {
 	for param, value := range map[string]string{
 		"_pragma=foreign_keys": "_pragma=foreign_keys(1)",
 		"_pragma=busy_timeout": "_pragma=busy_timeout(5000)",
+		"_pragma=journal_mode": "_pragma=journal_mode(WAL)",
+		"_pragma=synchronous":  "_pragma=synchronous(FULL)",
 	} {
 		if strings.Contains(dsn, param) {
 			continue
@@ -206,6 +218,16 @@ func SQLiteDSN(url string) string {
 		}
 	}
 	return dsn
+}
+
+// SQLiteFilePath is the database file a SQLite URL points at, without the
+// scheme or the pragma parameters.
+func SQLiteFilePath(url string) string {
+	path := SQLiteDSN(url)
+	if base, _, found := strings.Cut(path, "?"); found {
+		path = base
+	}
+	return strings.TrimPrefix(path, "file:")
 }
 
 // IsNotFound reports whether a query found nothing.
