@@ -155,6 +155,31 @@ func (s *Service) Upcoming(ctx context.Context, today core.Date, horizonDays int
 	return s.repo.UpcomingTrips(ctx, today, horizonDays)
 }
 
+// AdvanceStatuses moves trips between planning, active and completed to match
+// their dates, and reports how many it changed.
+//
+// Nobody is told. Saturday arriving is not news, so there is no notification
+// and no activity entry — the status is a derived fact the UI reads, not an
+// event. Archived trips are never touched: see Trip.DerivedStatus.
+func (s *Service) AdvanceStatuses(ctx context.Context, now time.Time) (int, error) {
+	candidates, err := s.repo.TripsForStatusReview(ctx, core.DateOf(now, time.UTC))
+	if err != nil {
+		return 0, err
+	}
+	changed := 0
+	for _, trip := range candidates {
+		derived := trip.DerivedStatus(now)
+		if derived == trip.Status {
+			continue
+		}
+		if err := s.repo.SetStatus(ctx, trip.ID, derived); err != nil {
+			return changed, err
+		}
+		changed++
+	}
+	return changed, nil
+}
+
 // Get returns a trip the caller belongs to.
 func (s *Service) Get(ctx context.Context, tripID, userID core.ID) (Trip, error) {
 	access, err := s.Access(ctx, tripID, userID)

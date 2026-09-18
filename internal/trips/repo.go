@@ -117,6 +117,41 @@ func (r *Repo) ListTripsForUser(ctx context.Context, userID core.ID, includeArch
 	return out, nil
 }
 
+// TripsForStatusReview lists trips whose status might no longer match their
+// dates, so the scheduler can advance them.
+//
+// The two date bounds are what keep this from scanning the whole table every
+// minute forever: a trip that has not started yet is already `planning` and
+// needs nothing, and one that finished more than a day ago has already been
+// marked `completed` and drops out. The day of slack on each side covers every
+// timezone without having to know the trip's — the decision itself is made in
+// Go, where the zone is available.
+func (r *Repo) TripsForStatusReview(ctx context.Context, today core.Date) ([]Trip, error) {
+	out := []Trip{}
+	err := r.db.WithContext(ctx).
+		Where("status <> ?", string(core.TripArchived)).
+		Where("start_date <= ?", today.AddDays(1)).
+		Where("status <> ? OR end_date >= ?", string(core.TripCompleted), today.AddDays(-1)).
+		Find(&out).Error
+	if err != nil {
+		return nil, core.Internal(fmt.Errorf("trips: status review: %w", err))
+	}
+	return out, nil
+}
+
+// SetStatus writes a derived status. It is separate from UpdateTrip because it
+// must not touch anything else and must not run the validator: the scheduler
+// is not a person editing a trip.
+func (r *Repo) SetStatus(ctx context.Context, id core.ID, status core.TripStatus) error {
+	err := r.db.WithContext(ctx).Model(&Trip{}).
+		Where("id = ?", id).
+		Updates(map[string]any{"status": string(status), "updated_at": time.Now().UTC()}).Error
+	if err != nil {
+		return core.Internal(fmt.Errorf("trips: set status: %w", err))
+	}
+	return nil
+}
+
 // UpcomingTrips lists non-archived trips whose end date has not passed. The
 // scheduler walks them to decide what to remind people about.
 func (r *Repo) UpcomingTrips(ctx context.Context, today core.Date, horizonDays int) ([]Trip, error) {

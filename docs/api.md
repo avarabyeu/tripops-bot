@@ -88,6 +88,11 @@ first, so a form can show all of its errors at once.
 | `GET` | `/trips/{tripID}/dashboard` | member — the whole home screen in one call |
 | `GET` | `/trips/{tripID}/activity` | member |
 
+`status` is derived from the dates by the scheduler — `planning` before the
+trip, `active` during it, `completed` after — in the trip's own timezone.
+`archived` is the exception: it is set by a person, and nothing derives it away
+again. A completed trip is still writable; only archiving closes a trip.
+
 The currency can only be changed while the trip has no expenses. Amounts are
 minor units of it with no rate history, so changing it later would silently
 reinterpret every recorded expense; the attempt returns `conflict`.

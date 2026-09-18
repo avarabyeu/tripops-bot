@@ -106,6 +106,19 @@ The owner keeps the ability because somebody has to be able to fix a wrong
 expense when the person who entered it has stopped reading the chat, and the
 owner is the single accountable person on a trip.
 
+## The trip status is derived, archived is chosen
+
+`planning`, `active` and `completed` follow the dates, in the trip's own
+timezone, advanced by the scheduler. `archived` never is: it is the one status
+a person picked, and a choice outranks a derivation — a trip somebody put away
+does not come back out because the calendar says so.
+
+Nothing hangs off the derived status. `Writable()` still means "not archived",
+so a completed trip stays fully editable; people add the last expenses after
+they get home. The status is a fact the UI reads, not an event, so the
+transition sends no notification and writes no activity entry. Saturday
+arriving is not news.
+
 ## Voting advises, organisers decide
 
 A decision closes itself at its deadline, but nothing is ever applied

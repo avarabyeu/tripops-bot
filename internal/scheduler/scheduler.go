@@ -83,6 +83,14 @@ func (s *Scheduler) Tick(ctx context.Context) {
 		s.log.Warn("voting reminders failed", "err", err)
 	}
 
+	// Before anything reads a status: a trip that has happened should not
+	// still say "planning" on the screen somebody opens next.
+	if advanced, err := s.deps.Trips.AdvanceStatuses(ctx, now); err != nil {
+		s.log.Warn("advance trip statuses failed", "err", err)
+	} else if advanced > 0 {
+		s.log.Info("trip statuses advanced", "count", advanced)
+	}
+
 	today := core.DateOf(now, time.UTC)
 	tripList, err := s.deps.Trips.Upcoming(ctx, today, 30)
 	if err != nil {

@@ -38,6 +38,28 @@ func (t Trip) Location() *time.Location { return core.LoadLocation(t.Timezone) }
 // Nights is how many overnight stays the dates imply; zero means a day trip.
 func (t Trip) Nights() int { return t.StartDate.Nights(t.EndDate) }
 
+// DerivedStatus is the status the trip's dates imply, in the trip's own
+// timezone: planning before it starts, active while it runs, completed once
+// the last day has passed.
+//
+// Archived is returned unchanged. It is the one status a person chose rather
+// than one the calendar implied, and a choice outranks a derivation — a trip
+// somebody put away does not come back out because its dates say so.
+func (t Trip) DerivedStatus(now time.Time) core.TripStatus {
+	if t.Status == core.TripArchived {
+		return core.TripArchived
+	}
+	today := core.DateOf(now, t.Location())
+	switch {
+	case today.Before(t.StartDate):
+		return core.TripPlanning
+	case t.EndDate.Before(today):
+		return core.TripCompleted
+	default:
+		return core.TripActive
+	}
+}
+
 // Member is a participant of one trip.
 type Member struct {
 	ID     core.ID `json:"id"      gorm:"primaryKey"`
