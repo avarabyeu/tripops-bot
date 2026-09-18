@@ -394,3 +394,80 @@ func TestAPIAcceptsCompactTripIDs(t *testing.T) {
 	// Nonsense is still nonsense.
 	organiser.do(http.MethodGet, "/api/v1/trips/not-an-id", nil, http.StatusBadRequest, nil)
 }
+
+// TestAPIDeleteTrip: only the owner, and it takes everything with it.
+func TestAPIDeleteTrip(t *testing.T) {
+	server, app := newServer(t)
+	owner := newClient(t, server, 7401, "Owner")
+	member := newClient(t, server, 7402, "Member")
+
+	var trip struct {
+		ID string `json:"id"`
+	}
+	owner.do(http.MethodPost, "/api/v1/trips", map[string]any{
+		"title": "Brevet", "start_date": "2026-09-23", "end_date": "2026-09-24",
+	}, http.StatusCreated, &trip)
+
+	var invite struct {
+		Token string `json:"token"`
+	}
+	owner.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/invites", map[string]any{},
+		http.StatusCreated, &invite)
+	member.do(http.MethodPost, "/api/v1/invites/"+invite.Token+"/join", nil, http.StatusOK, nil)
+
+	// Give the trip something in every corner, so the cascade is exercised.
+	var event struct {
+		ID string `json:"id"`
+	}
+	owner.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/events", map[string]any{
+		"title": "Departure", "type": "departure", "start_at": "2026-09-23T17:00:00Z",
+	}, http.StatusCreated, &event)
+	owner.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/decisions", map[string]any{
+		"title": "Where to?", "options": []string{"A", "B"},
+	}, http.StatusCreated, nil)
+	owner.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/expenses", map[string]any{
+		"title": "Fuel", "amount_minor": 8000, "category": "fuel",
+	}, http.StatusCreated, nil)
+	owner.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/checklists", map[string]any{
+		"title": "Bike", "scope": "shared", "items": []string{"Pump"},
+	}, http.StatusCreated, nil)
+
+	// A member is not an owner.
+	member.do(http.MethodDelete, "/api/v1/trips/"+trip.ID, nil, http.StatusForbidden, nil)
+	owner.do(http.MethodGet, "/api/v1/trips/"+trip.ID, nil, http.StatusOK, nil)
+
+	owner.do(http.MethodDelete, "/api/v1/trips/"+trip.ID, nil, http.StatusNoContent, nil)
+
+	// Gone for everyone, and gone from the list.
+	owner.do(http.MethodGet, "/api/v1/trips/"+trip.ID, nil, http.StatusNotFound, nil)
+	member.do(http.MethodGet, "/api/v1/trips/"+trip.ID, nil, http.StatusNotFound, nil)
+
+	var list struct {
+		Trips []struct {
+			ID string `json:"id"`
+		} `json:"trips"`
+	}
+	owner.do(http.MethodGet, "/api/v1/trips", nil, http.StatusOK, &list)
+	for _, got := range list.Trips {
+		if got.ID == trip.ID {
+			t.Error("the deleted trip is still listed")
+		}
+	}
+
+	// Nothing of it is left behind. expenses.paid_by references trip_members
+	// with no delete action, so this is the assertion that the cascade order
+	// actually works rather than happening to.
+	for _, table := range []string{
+		"trip_members", "trip_invites", "events", "event_participants",
+		"decisions", "decision_options", "expenses", "expense_participants",
+		"checklists", "checklist_items", "activity_log",
+	} {
+		var count int64
+		if err := app.DB.Table(table).Count(&count).Error; err != nil {
+			t.Fatalf("count %s: %v", table, err)
+		}
+		if count != 0 {
+			t.Errorf("%s still holds %d rows after the trip was deleted", table, count)
+		}
+	}
+}

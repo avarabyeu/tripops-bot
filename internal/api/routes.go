@@ -48,6 +48,7 @@ func (s *Server) routes(r chi.Router) {
 
 			r.Get("/", s.withAccess(s.handleGetTrip))
 			r.Patch("/", s.withAccess(s.handleUpdateTrip))
+			r.Delete("/", s.withAccess(s.handleDeleteTrip))
 			r.Get("/dashboard", s.withAccess(s.handleDashboard))
 			r.Get("/activity", s.withAccess(s.handleActivity))
 

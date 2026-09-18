@@ -252,6 +252,19 @@ func (s *Service) Update(ctx context.Context, access Access, in UpdateInput) (Tr
 	return updated, nil
 }
 
+// Delete removes a trip and everything on it: people, timeline, decisions,
+// logistics, checklists, expenses and their settlements.
+//
+// Owner only, and irreversible — there is no soft delete. Archiving exists for
+// "we are done with this trip"; deleting is for "this should not have been
+// created", so keeping a hidden copy would serve nobody.
+func (s *Service) Delete(ctx context.Context, access Access) error {
+	if !access.IsOwner() {
+		return core.Forbidden("only the trip owner can delete a trip")
+	}
+	return s.repo.DeleteTrip(ctx, access.Trip.ID)
+}
+
 // ------------------------------------------------------------- memberships --
 
 // Members lists the group.

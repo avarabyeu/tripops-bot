@@ -119,6 +119,7 @@ export const api = {
     }) => post<Trip>("/trips", input),
     get: (id: string) => get<{ trip: Trip; me: Member }>(trip(id)),
     update: (id: string, input: Record<string, unknown>) => patch<Trip>(trip(id), input),
+    remove: (id: string) => del(trip(id)),
     dashboard: (id: string) => get<Dashboard>(`${trip(id)}/dashboard`),
     activity: (id: string) =>
       get<{ activity: ActivityEntry[] }>(`${trip(id)}/activity`).then((r) => r.activity),

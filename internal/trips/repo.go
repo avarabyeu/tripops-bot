@@ -57,13 +57,38 @@ func (r *Repo) UpdateTrip(ctx context.Context, t Trip) (Trip, error) {
 	return r.TripByID(ctx, t.ID)
 }
 
+// DeleteTrip removes a trip and, by cascade, everything that belongs to it.
+//
+// The order matters: trip_members and expenses both cascade from trips, and
+// expenses.paid_by references trip_members with no delete action, so on an
+// engine that checks constraints per row a cascade could trip over itself.
+// Deleting the expense rows first makes the order explicit rather than
+// engine-dependent.
+func (r *Repo) DeleteTrip(ctx context.Context, id core.ID) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Expenses first, explicitly: they reference trip_members with no
+		// delete action, so leaving the order to the cascade would depend on
+		// how the engine schedules it.
+		if err := tx.Exec("DELETE FROM expenses WHERE trip_id = ?", id).Error; err != nil {
+			return core.Internal(fmt.Errorf("trips: delete expenses: %w", err))
+		}
+		res := tx.Delete(&Trip{}, "id = ?", id)
+		if res.Error != nil {
+			return core.Internal(fmt.Errorf("trips: delete: %w", res.Error))
+		}
+		if res.RowsAffected == 0 {
+			return core.NotFound("trip")
+		}
+		return nil
+	})
+}
+
 // TripSummary is a trip plus the caller's relationship to it, which is what
 // the trip list needs and nothing more.
 type TripSummary struct {
 	Trip
 	Role          core.Role `json:"role"`
 	MemberCount   int       `json:"member_count"`
-	PendingCount  int       `json:"pending_count"`
 	OpenDecisions int       `json:"open_decisions"`
 }
 

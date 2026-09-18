@@ -81,8 +81,14 @@ first, so a form can show all of its errors at once.
 | `POST` | `/trips` | — (creator becomes owner) |
 | `GET` | `/trips/{tripID}` | member |
 | `PATCH` | `/trips/{tripID}` | admin; archiving is owner-only |
+| `DELETE` | `/trips/{tripID}` | owner — irreversible, takes everything with it |
 | `GET` | `/trips/{tripID}/dashboard` | member — the whole home screen in one call |
 | `GET` | `/trips/{tripID}/activity` | member |
+
+Deleting a trip removes its people, timeline, decisions, logistics,
+accommodation, checklists, expenses and settlements. There is no soft delete:
+archiving covers "we are done with this trip", so a hidden copy of one that
+should never have existed would serve nobody.
 
 ### People and invites
 

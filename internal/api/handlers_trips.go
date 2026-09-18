@@ -136,6 +136,13 @@ func (s *Server) handleUpdateTrip(w http.ResponseWriter, r *http.Request, access
 	return httpx.JSON(w, http.StatusOK, trip)
 }
 
+func (s *Server) handleDeleteTrip(w http.ResponseWriter, r *http.Request, access trips.Access) error {
+	if err := s.svc.Trips.Delete(r.Context(), access); err != nil {
+		return err
+	}
+	return httpx.NoContent(w)
+}
+
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request, access trips.Access) error {
 	view, err := s.svc.Dashboard.Build(r.Context(), access)
 	if err != nil {

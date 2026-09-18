@@ -1,9 +1,11 @@
-import { api } from "../api";
+import { useState } from "react";
+import { api, ApiError } from "../api";
 import { dateRange } from "../format";
 import { useNavigation, useParam } from "../router";
+import { confirm } from "../telegram";
 import { useAsync } from "../useAsync";
 import { Loaded, Screen } from "../components/Screen";
-import { Card } from "../components/ui";
+import { AsyncButton, Card } from "../components/ui";
 import type { NotificationPreferences } from "../types";
 
 const CATEGORIES: { key: keyof NotificationPreferences; label: string; hint: string }[] = [
@@ -21,6 +23,25 @@ export function Settings() {
   const trip = useAsync(() => api.trips.get(tripId), [tripId]);
   const prefs = useAsync(() => api.preferences.get(), []);
   const activity = useAsync(() => api.trips.activity(tripId), [tripId]);
+
+  const [deleteError, setDeleteError] = useState<string | undefined>();
+
+  // Owner only, and irreversible, so it asks twice: Telegram's own confirm
+  // dialog, and the trip's name typed back is a step too far for a group of
+  // friends — the dialog names what is about to go.
+  const removeTrip = async () => {
+    const title = trip.data?.trip.title ?? "this trip";
+    if (!(await confirm(`Delete "${title}" for everyone? This cannot be undone.`))) return;
+    setDeleteError(undefined);
+    try {
+      await api.trips.remove(tripId);
+      // reset, not pop: the screens underneath are all about a trip that no
+      // longer exists and would each render their own 404.
+      nav.reset({ name: "trips" });
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : "Could not delete the trip.");
+    }
+  };
 
   const toggle = async (key: keyof NotificationPreferences, value: boolean) => {
     prefs.set((current) => ({ ...current, [key]: value }));
@@ -102,6 +123,27 @@ export function Settings() {
           )
         }
       </Loaded>
+
+      {trip.data?.me.role === "owner" && (
+        <>
+          <div className="section-label">Danger zone</div>
+          <Card>
+            <div className="card-row">
+              <span>
+                <div>Delete this trip</div>
+                <div className="tiny">
+                  Everything goes with it: people, timeline, decisions, logistics, checklists and
+                  the whole ledger. There is no undo.
+                </div>
+              </span>
+            </div>
+            {deleteError && <span className="field-error">{deleteError}</span>}
+            <AsyncButton block variant="danger" onClick={removeTrip}>
+              Delete trip
+            </AsyncButton>
+          </Card>
+        </>
+      )}
 
       <button type="button" className="btn ghost" onClick={() => nav.reset({ name: "trips" })}>
         ‹ All trips
