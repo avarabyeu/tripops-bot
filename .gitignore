@@ -26,7 +26,11 @@ go.work.sum
 
 # ---------------------------------------------------------------- Mini App --
 node_modules/
-miniapp/dist/
+# The Vite bundle is generated into the Go package that embeds it. The
+# directory itself is tracked, empty, so go:embed has something to match on a
+# clone that has never run npm.
+internal/webapp/dist/*
+!internal/webapp/dist/.gitkeep
 miniapp/.vite/
 npm-debug.log*
 yarn-error.log*

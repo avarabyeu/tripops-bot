@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/avarabyeu/tripops-bot/internal/accommodation"
 	"github.com/avarabyeu/tripops-bot/internal/activity"
@@ -64,6 +65,10 @@ func (s *Server) Handler() http.Handler {
 	r.Use(httpx.Recoverer(s.log))
 	r.Use(httpx.RequestLogger(s.log))
 	r.Use(httpx.CORS(s.cfg.CORSOrigins))
+	// nginx used to gzip both the bundle and the JSON on its way past. It no
+	// longer sits in front of anything, so this does it — chi ships the
+	// middleware, so nothing new is on the dependency list for it.
+	r.Use(middleware.Compress(5))
 	s.routes(r)
 	return r
 }

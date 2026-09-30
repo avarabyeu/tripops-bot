@@ -22,7 +22,7 @@ tasks:
       - npm run dev
 
   build:
-    desc: Type-check and build the production bundle into dist/
+    desc: Type-check and build the bundle into internal/webapp/dist, which the Go binary embeds
     deps: [install]
     sources:
       - src/**/*
@@ -31,7 +31,7 @@ tasks:
       - tsconfig.json
       - vite.config.ts
     generates:
-      - dist/**/*
+      - ../internal/webapp/dist/**/*
     cmds:
       - npm run build
 
@@ -50,4 +50,5 @@ tasks:
   clean:
     desc: Remove build output and dependencies
     cmds:
-      - rm -rf dist node_modules
+      # The .gitkeep stays: go:embed needs the directory non-empty to compile.
+      - rm -rf ../internal/webapp/dist/assets ../internal/webapp/dist/index.html node_modules

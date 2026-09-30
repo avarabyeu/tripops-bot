@@ -27,6 +27,7 @@ import (
 	"github.com/avarabyeu/tripops-bot/internal/telegram"
 	"github.com/avarabyeu/tripops-bot/internal/trips"
 	"github.com/avarabyeu/tripops-bot/internal/users"
+	"github.com/avarabyeu/tripops-bot/internal/webapp"
 	"github.com/avarabyeu/tripops-bot/migrations"
 )
 
@@ -203,6 +204,16 @@ func runServe(ctx context.Context, cmd *cli.Command) error {
 
 	serverErr := make(chan error, 1)
 	go func() {
+		// Whether the front end is in this binary is worth one line: a
+		// release built in the wrong order still starts, serves the API and
+		// the bot perfectly, and shows an explanation where the app should
+		// be. Silence there would be a confusing afternoon.
+		if webapp.Built() {
+			log.Info("mini app served from this binary")
+		} else {
+			log.Warn("no mini app bundle embedded — run `task app:build` and rebuild, " +
+				"or use the Vite dev server in development")
+		}
 		log.Info("http server listening", "addr", httpServer.Addr, "env", cfg.Env)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err

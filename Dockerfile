@@ -1,4 +1,23 @@
 # syntax=docker/dockerfile:1
+#
+# One image. The Mini App is compiled into the binary (internal/webapp), so
+# there is no nginx container, no private network between the two, and no way
+# to ship a new front end against an old backend.
+
+# ------------------------------------------------------------- web builder --
+# Pinned to the *build* platform: the bundle is static files with no
+# architecture, so building npm under emulation would cost minutes for nothing.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
+
+WORKDIR /app/miniapp
+
+COPY miniapp/package.json miniapp/package-lock.json* ./
+RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+COPY miniapp/ ./
+# vite.config.ts writes to ../internal/webapp/dist, which is where the Go
+# build below expects to find it.
+RUN npm run build
 
 # ----------------------------------------------------------------- builder --
 # Pinned to the *build* platform, not the target. Go cross-compiles, so an
@@ -13,6 +32,10 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 COPY . .
+# The bundle, into the directory internal/webapp embeds. It lands after the
+# source copy so a front-end-only change does not invalidate the Go module
+# cache above it.
+COPY --from=web /app/internal/webapp/dist ./internal/webapp/dist
 
 ARG VERSION=docker
 # Set by BuildKit from --platform; empty on a plain `docker build`, where the

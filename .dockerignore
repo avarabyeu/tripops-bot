@@ -6,7 +6,9 @@ coverage.out
 *.db-shm
 *.db-wal
 miniapp/node_modules
-miniapp/dist
+# The bundle is built inside the image, so a local one must not be copied in
+# and shadow it — or worse, be stale.
+internal/webapp/dist
 .env
 .env.local
 docs

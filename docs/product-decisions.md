@@ -183,20 +183,74 @@ and `npm ci` on it, which hung for six minutes and took SSH down with it.
 
 So the images cross-build locally — `docker buildx bake` over the build
 definitions already in `docker-compose.yml`, so there is no second copy of them
-— and travel to the server as `docker save | gzip | docker load` over the SSH
-context. No registry: two images at roughly 30 MB gzipped do not justify one,
+— and travels to the server as `docker save | gzip | docker load` over the SSH
+context. No registry: one image at roughly 10 MB gzipped does not justify one,
 and moving to a registry later is a flag on the same bake command rather than a
 rewrite.
 
-Cross-building only pays off if it does not emulate. Both Dockerfiles pin their
-builder stage to `--platform=$BUILDPLATFORM` and pass `$TARGETARCH` to the Go
-compiler; the Mini App's bundle is static files with no architecture at all, so
-only its nginx stage has to match the target. Both images build in about twelve
-seconds on an arm64 laptop for an amd64 server, against minutes under QEMU.
+Cross-building only pays off if it does not emulate. Both builder stages pin
+`--platform=$BUILDPLATFORM` and the Go stage passes `$TARGETARCH` to the
+compiler; the Mini App's bundle is static files with no architecture at all,
+so the node stage never needs to match the target either. It builds in about
+twelve seconds on an arm64 laptop for an amd64 server, against minutes under
+QEMU.
 
 `deploy:ship` checks the architecture of what it is about to send, because
 `task docker:up` builds the same tags for the developer's own machine and would
 otherwise quietly ship an image the server cannot execute.
+
+## One container: the Mini App is compiled into the binary
+
+There used to be two — the Go backend, and nginx serving the bundle and
+proxying `/api` and `/telegram` back to it. nginx was doing four jobs: static
+files, cache headers, a single-page fallback, and that proxy. Three of them
+are a few lines of Go, and the fourth exists only because there were two
+containers in the first place.
+
+`internal/webapp` embeds the Vite output with `go:embed` and serves it from
+the router's NotFound handler, so anything the API does not claim is the app.
+Vite writes straight into that package, which means there is no copy step
+between the two builds to forget.
+
+What it bought:
+
+- One image to build, save, gzip, ship over SSH and prune, on a host with one
+  CPU and a gigabyte of RAM. Measured on amd64, the payload `deploy:ship`
+  sends went from **28.6 MB to 8.9 MB**: the `nginx:alpine` layer was larger
+  than the entire distroless backend it fronted, to serve 292 KB of assets.
+- Same origin by construction. CORS and the proxy block were both arranging
+  something that is now simply true.
+- No drift. Two images can be shipped out of step — a new front end against
+  an old backend — and one cannot.
+- One less config file that is only exercised in production. That file had
+  already caused an outage once, when `.dockerignore` excluded the
+  `nginx.conf` the Dockerfile copied.
+
+What it cost, and how:
+
+- **Compression.** `net/http` does not do it, and the bundle is 283 KB raw
+  against 90 KB gzipped — a real regression on a phone network. `chi` ships
+  `middleware.Compress`, so this is one line and no new dependency. It is
+  mounted on the whole router, which is also what nginx did: `gzip_types`
+  covered the proxied JSON too.
+- **Cache headers**, re-stated in Go: `immutable` for `/assets/*`, which Vite
+  hashes, and `no-store` for `index.html`, which is how a new build reaches a
+  phone that already has the old one open.
+- **A missing asset is a 404**, not the app shell with a 200. nginx's
+  `try_files` had the stricter rule for `/assets/` and the loose one
+  elsewhere; that distinction is worth keeping, because a broken deploy that
+  answers every request with HTML is a blank screen with no clue in it.
+
+The trap, which is the reason this needs writing down: `go:embed all:dist`
+will not compile against a directory with no files in it, and a fresh clone
+has never run npm. So `internal/webapp/dist/.gitkeep` is tracked, the rest of
+the directory is ignored, and a Vite plugin puts the placeholder back after
+every build — because `emptyOutDir` deletes it, and the person who hits that
+is whoever next clones the repository, not whoever ran the build.
+
+A binary without a bundle still runs. The API and the bot work, `Built()`
+reports false in the startup log, and the app's route answers 503 with an
+explanation of which command was missed.
 
 ## A trip is visible to its members, and to nobody else
 

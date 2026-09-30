@@ -9,24 +9,26 @@
 # names a deployment.
 #
 # This layers on docker-compose.yml — the backend on SQLite — so the deployed
-# stack is two containers and a file. For the workload this product has (one
-# process, a trip being a handful of people) a database server earns nothing;
-# docker-compose-pg.yml is still there if that ever changes.
+# stack is one container and a file. The Mini App is compiled into the binary,
+# so the process that serves the API serves the app. For the workload this
+# product has (one process, a trip being a handful of people) a database
+# server earns nothing either; docker-compose-pg.yml is still there if that
+# ever changes.
 #
 # It publishes the stack through an existing Traefik, which already terminates
 # TLS and redirects http to https. Traefik runs with exposedbydefault=false, so
 # a container is routed only if it says so itself — that is what the labels are.
 #
-# Only the Mini App is exposed. It serves the app and proxies /api and
-# /telegram to the backend over the private network, so the browser and
-# Telegram see one origin and the backend never joins the shared network.
+# One service is exposed, because there is only one. The browser and Telegram
+# reach the same process on the same origin, which is what CORS and the old
+# nginx proxy block existed to arrange.
 
 # The deployed stack gets a name of its own, so its containers are not tangled
 # with the local ones.
 name: tripops
 
 services:
-  miniapp:
+  backend:
     # Built on a developer machine and loaded in by `task deploy:ship`; there
     # is no registry to fall back to, so say that rather than let compose go
     # looking on Docker Hub and report a confusing error.
@@ -49,12 +51,8 @@ services:
       # ACME resolver configured on the Traefik side; it issues and renews.
       traefik.http.routers.tripops.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-default}
 
-      # nginx listens on 80 inside the container.
-      traefik.http.services.tripops.loadbalancer.server.port: "80"
+      traefik.http.services.tripops.loadbalancer.server.port: "8080"
 
-  backend:
-    pull_policy: never
-    ports: !override []
     # A directory on the host rather than the base file's named volume, so the
     # database sits somewhere you chose and can be backed up with the rest of
     # that host. `!override` replaces the base mount rather than adding to it.
@@ -73,7 +71,9 @@ services:
       TELEGRAM_BOT_MODE: webhook
       TELEGRAM_WEBHOOK_URL: https://${PUBLIC_DOMAIN}
       MINIAPP_URL: https://${PUBLIC_DOMAIN}
-      # Same origin as the Mini App, so the browser sends no preflight.
+      # The app is served by this process, so every request is same-origin
+      # and no preflight is ever sent. Kept for anything pointed at the API
+      # from elsewhere — a local Vite dev server against production, say.
       CORS_ORIGINS: https://${PUBLIC_DOMAIN}
 
 networks:

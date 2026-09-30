@@ -48,6 +48,21 @@ jobs:
       - name: Lint
         run: golangci-lint run --timeout 5m
 
+      # The Go binary embeds the Mini App bundle, so building it here is what
+      # lets the static-serving tests actually run instead of skipping. It
+      # costs a few seconds and covers the rules that replaced the nginx
+      # config: cache headers, the single-page fallback, and a missing asset
+      # being a 404 rather than the app shell.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: miniapp/package-lock.json
+
+      - name: Build the Mini App bundle
+        working-directory: miniapp
+        run: npm ci && npm run build
+
       - name: Test (SQLite)
         # No CGO_ENABLED=0 here: the race detector needs cgo on Linux, even
         # though darwin builds it without.
@@ -90,6 +105,9 @@ jobs:
           TEST_DATABASE_URL: postgres://tripops:tripops@localhost:5432/tripops_test?sslmode=disable
         run: go test -race -count=1 ./test/...
 
+  # The backend job builds the bundle too, because the binary embeds it. This
+  # job stays because it is the one that fails loudly on a TypeScript error,
+  # rather than burying it in a Go job's log.
   miniapp:
     name: Mini App
     runs-on: ubuntu-latest

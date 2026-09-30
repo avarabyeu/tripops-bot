@@ -5,7 +5,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/avarabyeu/tripops-bot/internal/core"
 	"github.com/avarabyeu/tripops-bot/internal/httpx"
+	"github.com/avarabyeu/tripops-bot/internal/webapp"
 )
 
 // routes registers the whole REST surface.
@@ -29,6 +31,16 @@ func (s *Server) routes(r chi.Router) {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(s.authenticate())
+
+		// An unknown path under /api is a client bug and must read like one.
+		// Without this it would fall through to the Mini App below and answer
+		// a fetch with an HTML page.
+		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			httpx.WriteError(w, r, s.log, core.NotFound("endpoint"))
+		})
+		r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+			httpx.WriteError(w, r, s.log, core.NotFound("endpoint"))
+		})
 
 		// Identity and settings.
 		r.Get("/me", s.handle(s.handleMe))
@@ -119,4 +131,9 @@ func (s *Server) routes(r chi.Router) {
 			r.Delete("/attachments/{attachmentID}", s.withAccess(s.handleDeleteAttachment))
 		})
 	})
+
+	// Everything the API does not claim is the Mini App, served out of this
+	// binary. That is the whole reason there is no second container: the app
+	// and the API are one origin because they are one process.
+	r.NotFound(webapp.Handler().ServeHTTP)
 }

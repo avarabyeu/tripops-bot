@@ -62,14 +62,5 @@ services:
       retries: 5
       start_period: 10s
 
-  miniapp:
-    build:
-      context: ./miniapp
-    depends_on:
-      - backend
-    ports:
-      - "3000:80"
-    restart: unless-stopped
-
 volumes:
   postgres-data:

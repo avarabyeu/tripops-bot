@@ -1,10 +1,12 @@
-# The default stack: the backend on SQLite, plus the Mini App behind nginx.
+# The default stack: one container.
 #
 #   docker compose up --build
 #
-# No database server. The whole trip lives in one file on a named volume,
-# which is enough for a group of friends and makes the stack two containers
-# instead of three. For PostgreSQL use docker-compose-pg.yml.
+# The Mini App is compiled into the binary, so the image that serves the API
+# serves the app too — same origin, no proxy, nothing to keep in step. No
+# database server either: the whole trip lives in one file on a named volume,
+# which is enough for a group of friends. For PostgreSQL use
+# docker-compose-pg.yml.
 #
 # Copy .env.example to .env and set TELEGRAM_BOT_TOKEN first. Without a token
 # everything still runs; the bot and notifications are simply disabled.
@@ -39,6 +41,7 @@ services:
     volumes:
       - sqlite-data:/data
     ports:
+      # The app and the API are both here.
       - "8080:8080"
     restart: unless-stopped
     healthcheck:
@@ -48,16 +51,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 10s
-
-  miniapp:
-    image: tripops-miniapp:latest
-    build:
-      context: ./miniapp
-    depends_on:
-      - backend
-    ports:
-      - "3000:80"
-    restart: unless-stopped
 
 volumes:
   sqlite-data:

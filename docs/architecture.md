@@ -5,13 +5,14 @@ Telegram Mini App — over one set of domain services.
 
 ```
                     ┌──────────────┐        ┌──────────────┐
-   Telegram  ──────▶│  bot adapter │        │  Mini App    │─── React/Vite
-   updates          │ internal/    │        │  (browser)   │
-                    │  telegram    │        └──────┬───────┘
+   Telegram  ──────▶│  bot adapter │        │  Mini App    │─── React/Vite,
+   updates          │ internal/    │        │  (browser)   │    embedded in
+                    │  telegram    │        └──────┬───────┘    the binary
                     └──────┬───────┘               │ REST + signed initData
                            │                       ▼
                            │              ┌──────────────────┐
-                           └─────────────▶│  internal/api    │  chi router
+                           └─────────────▶│  internal/api    │  chi router;
+                                          │  internal/webapp │  one origin
                                           └────────┬─────────┘
                                                    ▼
                         ┌──────────────────────────────────────────┐
@@ -122,13 +123,20 @@ deliberately portable schema is what makes that work; see
 
 `tripops serve` runs four things in one process:
 
-1. the HTTP server (REST for the Mini App, the webhook endpoint if configured);
+1. the HTTP server — REST for the Mini App, the Mini App itself, and the
+   webhook endpoint if configured;
 2. the bot — long polling in development, webhook in production;
 3. the scheduler, re-evaluating reminder rules on an interval;
 4. the delivery worker, draining the outbox.
 
 They share the connection pool and a cancellable context; SIGTERM stops
 accepting requests, then waits for the workers.
+
+The bundle is compiled in. `internal/webapp` embeds the Vite output and the
+router serves it from its NotFound handler, so anything the API does not claim
+is the app. That is why the deployed stack is one container: there is no
+static host and no proxy in front, and the browser only ever sees one origin
+because there only ever is one.
 
 ## Deliberate omissions
 

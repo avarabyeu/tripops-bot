@@ -217,22 +217,26 @@ task test:integration
 
 ## Deployment
 
-Two stacks, same images, different engine:
+Two stacks, same image, different engine:
 
 ```bash
-task docker:up        # default: backend on SQLite + Mini App — two containers
-task docker:pg:up     # PostgreSQL + backend + Mini App — what production runs
+task docker:up        # default: one container, SQLite in a named volume
+task docker:pg:up     # the same image against PostgreSQL
 task docker:logs
 ```
+
+One container, because the Mini App is compiled into the binary: the process
+that serves the API serves the app, on the same origin, with no proxy in
+between.
 
 `docker-compose.yml` runs the backend on a SQLite file in a named volume, which
 is enough for a group of friends and needs no database server.
 `docker-compose-pg.yml` is the same stack on PostgreSQL; use it to check a
 change against the production engine.
 
-The backend builds to a static binary in a distroless image (no cgo — the
-SQLite driver is pure Go). Production needs three things: this container, a
-database, and the Mini App bundle on a static host. No Kubernetes, no object
+It builds to a static binary in a distroless image (no cgo — the SQLite
+driver is pure Go), with the bundle inside it. Production needs two things:
+this container and a file. No Kubernetes, no object
 storage: Telegram keeps attachment bytes and TripOps stores only the handles.
 
 ```bash
@@ -268,14 +272,15 @@ changes.
 
 The Dockerfiles pin their builder stages to `$BUILDPLATFORM` and let Go target
 `$TARGETARCH`, so cross-building runs at native speed instead of under QEMU —
-about twelve seconds for both images rather than minutes.
+a few seconds rather than minutes, and 8.9 MB over the wire rather than the
+28.6 MB the two-image stack used to cost.
 
 Both files are gitignored, so your domain, webhook secret, database password
 and deployment target stay on the host: nothing in the repository names a
 deployment.
 
 The overlay layers on `docker-compose.yml` — the backend on SQLite — so the
-deployed stack is **two containers and a file**. At this product's scale a
+deployed stack is **one container and a file**. At this product's scale a
 database server earns nothing; `docker-compose-pg.yml` is still there, and
 still tested, if that changes.
 

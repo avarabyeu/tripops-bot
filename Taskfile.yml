@@ -218,14 +218,14 @@ tasks:
 
   deploy:build:
     dotenv: [".env.production"]
-    desc: Cross-build the production images locally for the server's architecture
+    desc: Cross-build the production image locally for the server's architecture
     env:
       # Keeps the result a plain image rather than a manifest index, so
       # `docker save`/`load` stays simple.
       BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
     cmds:
-      # bake reads the build definitions out of docker-compose.yml, so there is
-      # no second copy of them here, and it builds both images in parallel.
+      # bake reads the build definition out of docker-compose.yml, so there is
+      # no second copy of it here.
       - |
         docker buildx bake -f docker-compose.yml \
           --set '*.platform={{.DEPLOY_PLATFORM}}' \
@@ -234,7 +234,7 @@ tasks:
 
   deploy:ship:
     dotenv: [".env.production"]
-    desc: Send the locally built images to the server over SSH
+    desc: Send the locally built image to the server over SSH
     preconditions:
       - sh: docker image inspect tripops-backend:latest >/dev/null 2>&1
         msg: "no image to ship — run `task deploy:build` first"
@@ -243,16 +243,14 @@ tasks:
       # image and ships something the server cannot execute.
       - sh: |
           want=$(echo '{{.DEPLOY_PLATFORM}}' | cut -d/ -f2)
-          for image in tripops-backend:latest tripops-miniapp:latest; do
-            docker image inspect "$image" | grep -q "\"Architecture\": \"$want\"" || exit 1
-          done
-        msg: "the local images are not built for {{.DEPLOY_PLATFORM}} — run `task deploy:build` again (a local `task docker:up` overwrites these tags)"
+          docker image inspect tripops-backend:latest | grep -q "\"Architecture\": \"$want\""
+        msg: "the local image is not built for {{.DEPLOY_PLATFORM}} — run `task deploy:build` again (a local `task docker:up` overwrites this tag)"
     cmds:
       # The server has one CPU and a gigabyte of RAM; it is not going to build
       # anything. gzip because this goes over SSH.
       - |
         set -e
-        docker save tripops-backend:latest tripops-miniapp:latest \
+        docker save tripops-backend:latest \
           | gzip \
           | docker ${DEPLOY_CONTEXT:+--context "$DEPLOY_CONTEXT"} load
         # Each deploy orphans the previous image, and disk is as tight as
@@ -269,14 +267,14 @@ tasks:
 
   deploy:up:
     dotenv: [".env.production"]
-    desc: Start the public stack (backend on SQLite + Mini App behind Traefik)
+    desc: Start the public stack (one container on SQLite, behind Traefik)
     preconditions:
       - sh: test -f docker-compose.deploy.yml
         msg: "docker-compose.deploy.yml is missing — copy docker-compose.deploy.yml.example and edit it"
       - sh: test -f .env.production
         msg: ".env.production is missing — copy .env.example and fill it in"
     cmds:
-      # No --build: the images are built on a developer machine and loaded in
+      # No --build: the image is built on a developer machine and loaded in
       # by `task deploy:ship`.
       - "{{.DEPLOY}} up -d"
       - "{{.DEPLOY}} ps"
@@ -289,7 +287,7 @@ tasks:
 
   deploy:logs:
     dotenv: [".env.production"]
-    desc: Follow the public stack's backend logs
+    desc: Follow the public stack's logs
     cmds:
       - "{{.DEPLOY}} logs -f backend"
 
