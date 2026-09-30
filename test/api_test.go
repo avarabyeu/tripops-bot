@@ -155,8 +155,8 @@ func TestAPIInvitationFlow(t *testing.T) {
 	}
 	organiser.do(http.MethodPost, "/api/v1/trips", map[string]any{
 		"title":      "Brevet Łódź 200",
-		"start_date": "2026-09-23",
-		"end_date":   "2026-09-24",
+		"start_date": soon(7),
+		"end_date":   soon(8),
 		"timezone":   "Europe/Warsaw",
 		"currency":   "EUR",
 	}, http.StatusCreated, &trip)
@@ -167,8 +167,8 @@ func TestAPIInvitationFlow(t *testing.T) {
 	// Validation is enforced server side, not just in the client.
 	organiser.do(http.MethodPost, "/api/v1/trips", map[string]any{
 		"title":      "",
-		"start_date": "2026-09-24",
-		"end_date":   "2026-09-23",
+		"start_date": soon(8),
+		"end_date":   soon(7),
 	}, http.StatusBadRequest, nil)
 
 	// The friend is not a member yet: the trip must look like it does not exist.
@@ -214,7 +214,7 @@ func TestAPIInvitationFlow(t *testing.T) {
 	friend.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/events", map[string]any{
 		"title":    "Departure",
 		"type":     "departure",
-		"start_at": "2026-09-23T17:00:00Z",
+		"start_at": soonAt(7, 17),
 	}, http.StatusForbidden, nil)
 
 	var event struct {
@@ -227,7 +227,7 @@ func TestAPIInvitationFlow(t *testing.T) {
 	organiser.do(http.MethodPost, "/api/v1/trips/"+trip.ID+"/events", map[string]any{
 		"title":    "Departure",
 		"type":     "departure",
-		"start_at": "2026-09-23T17:00:00Z",
+		"start_at": soonAt(7, 17),
 	}, http.StatusCreated, &event)
 	if len(event.Participants) != 2 {
 		t.Errorf("a new event should include everyone, got %+v", event.Participants)
@@ -260,6 +260,20 @@ func TestAPIInvitationFlow(t *testing.T) {
 
 // TestAPIExpensesAndSettlement covers the money path over HTTP, including the
 // "Mark as settled" button the balances screen offers.
+// soon renders a date a fixed number of days from today, for tests that assert
+// something time-relative — "the next event", a reminder window. A literal
+// date works right up until it does not: these tests were written against
+// 2026-09-23 and started failing the morning that date went past.
+func soon(days int) string {
+	return time.Now().UTC().AddDate(0, 0, days).Format("2006-01-02")
+}
+
+// soonAt is the same, as an instant at a given hour UTC.
+func soonAt(days, hour int) string {
+	d := time.Now().UTC().AddDate(0, 0, days)
+	return time.Date(d.Year(), d.Month(), d.Day(), hour, 0, 0, 0, time.UTC).Format(time.RFC3339)
+}
+
 func TestAPIExpensesAndSettlement(t *testing.T) {
 	server, _ := newServer(t)
 	alice := newClient(t, server, 7101, "Alice")

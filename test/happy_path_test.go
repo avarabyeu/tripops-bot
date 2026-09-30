@@ -29,12 +29,18 @@ func TestHappyPath(t *testing.T) {
 
 	// ------------------------------------------------ 1. create the trip --
 
+	// A week out, not a literal date: this walk-through asserts the dashboard
+	// names the *next* event, which stops being true the morning a hard-coded
+	// date goes past — as 2026-09-23 duly did.
+	day1 := time.Now().UTC().AddDate(0, 0, 7)
+	day2 := day1.AddDate(0, 0, 1)
+
 	av := mustUser(t, app, 9001, "AV")
 	trip, err := app.Trips.Create(ctx, av, trips.CreateInput{
 		Title:       "Brevet Łódź 200",
 		Description: "200 km, one overnight",
-		StartDate:   core.NewDate(2026, time.September, 23),
-		EndDate:     core.NewDate(2026, time.September, 24),
+		StartDate:   core.DateOf(day1, time.UTC),
+		EndDate:     core.DateOf(day2, time.UTC),
 		Timezone:    "Europe/Warsaw",
 		Currency:    "EUR",
 	})
@@ -87,7 +93,7 @@ func TestHappyPath(t *testing.T) {
 	departure, err := app.Events.Create(ctx, owner, events.CreateInput{
 		Title:   "Departure",
 		Type:    events.TypeDeparture,
-		StartAt: time.Date(2026, time.September, 23, 19, 0, 0, 0, loc),
+		StartAt: time.Date(day1.Year(), day1.Month(), day1.Day(), 19, 0, 0, 0, loc),
 	})
 	if err != nil {
 		t.Fatalf("create departure: %v", err)
@@ -102,7 +108,7 @@ func TestHappyPath(t *testing.T) {
 	if _, err := app.Events.Create(ctx, owner, events.CreateInput{
 		Title:   "Brevet Start",
 		Type:    events.TypeRace,
-		StartAt: time.Date(2026, time.September, 24, 6, 0, 0, 0, loc),
+		StartAt: time.Date(day2.Year(), day2.Month(), day2.Day(), 6, 0, 0, 0, loc),
 	}); err != nil {
 		t.Fatalf("create brevet start: %v", err)
 	}
