@@ -864,3 +864,84 @@ func TestAPIEditTrip(t *testing.T) {
 	alice.do(http.MethodPatch, path, map[string]any{"status": "archived"}, http.StatusOK, nil)
 	alice.do(http.MethodPatch, path, map[string]any{"title": "Too late"}, http.StatusConflict, nil)
 }
+
+// TestAPIEditAndDeleteEvent covers the timeline edits the Mini App now makes.
+// Plans move — a departure slips an hour, a leg is cancelled — and until the
+// screen could do this, a wrong event stayed on the timeline forever.
+func TestAPIEditAndDeleteEvent(t *testing.T) {
+	server, _ := newServer(t)
+	alice := newClient(t, server, 7601, "Alice")
+	bob := newClient(t, server, 7602, "Bob")
+
+	var trip struct {
+		ID string `json:"id"`
+	}
+	alice.do(http.MethodPost, "/api/v1/trips", map[string]any{
+		"title": "Brevet", "start_date": "2026-05-01", "end_date": "2026-05-03",
+	}, http.StatusCreated, &trip)
+	path := "/api/v1/trips/" + trip.ID
+
+	var invite struct {
+		Token string `json:"token"`
+	}
+	alice.do(http.MethodPost, path+"/invites", map[string]any{}, http.StatusCreated, &invite)
+	bob.do(http.MethodPost, "/api/v1/invites/"+invite.Token+"/join", nil, http.StatusOK, nil)
+
+	type eventBody struct {
+		ID           string `json:"id"`
+		Title        string `json:"title"`
+		Type         string `json:"type"`
+		StartAt      string `json:"start_at"`
+		LocationName string `json:"location_name"`
+		Participants []struct {
+			DisplayName string `json:"display_name"`
+			Status      string `json:"status"`
+		} `json:"participants"`
+	}
+	var event eventBody
+	alice.do(http.MethodPost, path+"/events", map[string]any{
+		"title": "Departure", "type": "departure", "start_at": "2026-05-01T06:00:00Z",
+	}, http.StatusCreated, &event)
+	eventPath := path + "/events/" + event.ID
+
+	// Bob answers, so the edit below can be checked for not resetting him.
+	bob.do(http.MethodPost, eventPath+"/rsvp", map[string]any{"status": "attending"}, http.StatusOK, nil)
+
+	// The departure slips an hour and moves across town.
+	var moved eventBody
+	alice.do(http.MethodPatch, eventPath, map[string]any{
+		"start_at":      "2026-05-01T07:00:00Z",
+		"location_name": "Piotrkowska 1",
+	}, http.StatusOK, &moved)
+	if moved.StartAt != "2026-05-01T07:00:00Z" || moved.LocationName != "Piotrkowska 1" {
+		t.Fatalf("moved = %+v", moved)
+	}
+	if moved.Title != "Departure" {
+		t.Errorf("a sparse patch cleared the title: %q", moved.Title)
+	}
+	// Moving an event must not silently un-answer everybody.
+	for _, p := range moved.Participants {
+		if p.DisplayName == "Bob" && p.Status != "attending" {
+			t.Errorf("bob answered %q after the event moved, want attending", p.Status)
+		}
+	}
+
+	// Changing the kind is allowed; the timeline is not a fixed shape.
+	alice.do(http.MethodPatch, eventPath, map[string]any{"type": "transport"}, http.StatusOK, nil)
+
+	// A plain member may answer for themselves but not rewrite the timeline.
+	bob.do(http.MethodPatch, eventPath, map[string]any{"title": "Not Bob's to move"},
+		http.StatusForbidden, nil)
+	bob.do(http.MethodDelete, eventPath, nil, http.StatusForbidden, nil)
+
+	// An organiser removes it, and it is gone for everyone.
+	alice.do(http.MethodDelete, eventPath, nil, http.StatusNoContent, nil)
+	var remaining struct {
+		Events []eventBody `json:"events"`
+	}
+	bob.do(http.MethodGet, path+"/events", nil, http.StatusOK, &remaining)
+	if len(remaining.Events) != 0 {
+		t.Errorf("timeline still has %d events", len(remaining.Events))
+	}
+	alice.do(http.MethodDelete, eventPath, nil, http.StatusNotFound, nil)
+}

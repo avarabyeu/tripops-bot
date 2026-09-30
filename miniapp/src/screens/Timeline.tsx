@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { api, ApiError } from "../api";
-import { dayIn, timeIn, EVENT_ICONS, EVENT_TYPE_NAMES } from "../format";
+import {
+  dayIn,
+  timeIn,
+  fromLocalInput,
+  dayAheadIn,
+  toLocalInput,
+  EVENT_ICONS,
+  EVENT_TYPE_NAMES,
+} from "../format";
 import { useParam } from "../router";
+import { confirm } from "../telegram";
 import { useAsync } from "../useAsync";
 import { Loaded, Screen } from "../components/Screen";
 import { AsyncButton, Button, Card, Chip, Empty, Field, Sheet } from "../components/ui";
@@ -30,6 +39,7 @@ export function Timeline() {
   const trip = useAsync(() => api.trips.get(tripId), [tripId]);
   const events = useAsync(() => api.events.list(tripId), [tripId]);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<TripEvent | undefined>();
 
   const canManage = trip.data ? trip.data.me.role !== "member" : false;
   const timezone = trip.data?.trip.timezone ?? "UTC";
@@ -67,6 +77,7 @@ export function Timeline() {
                       event={event}
                       timezone={timezone}
                       meId={meId}
+                      onEdit={canManage ? () => setEditing(event) : undefined}
                       onAnswer={async (status) => {
                         const updated = await api.events.rsvp(tripId, event.id, status);
                         events.set((current) => current.map((e) => (e.id === updated.id ? updated : e)));
@@ -81,12 +92,25 @@ export function Timeline() {
       </Loaded>
 
       {adding && (
-        <AddEventSheet
+        <EventSheet
           tripId={tripId}
           timezone={timezone}
           onClose={() => setAdding(false)}
-          onCreated={() => {
+          onDone={() => {
             setAdding(false);
+            events.reload();
+          }}
+        />
+      )}
+
+      {editing && (
+        <EventSheet
+          tripId={tripId}
+          timezone={timezone}
+          event={editing}
+          onClose={() => setEditing(undefined)}
+          onDone={() => {
+            setEditing(undefined);
             events.reload();
           }}
         />
@@ -117,11 +141,14 @@ function EventCard({
   event,
   timezone,
   meId,
+  onEdit,
   onAnswer,
 }: {
   event: TripEvent;
   timezone: string;
   meId: string;
+  /** Absent for anyone who may not change the timeline. */
+  onEdit?: () => void;
   onAnswer: (status: RSVP) => Promise<void>;
 }) {
   const mine = event.participants.find((p) => p.member_id === meId);
@@ -132,9 +159,15 @@ function EventCard({
       <div className="timeline-time">{timeIn(event.start_at, timezone)}</div>
       <Card tight>
         <div className="card-row">
-          <div className="title">
-            {EVENT_ICONS[event.type]} {event.title}
-          </div>
+          {onEdit ? (
+            <button type="button" className="linklike title" onClick={onEdit}>
+              {EVENT_ICONS[event.type]} {event.title}
+            </button>
+          ) : (
+            <div className="title">
+              {EVENT_ICONS[event.type]} {event.title}
+            </div>
+          )}
           <span className="tiny mono-num">
             {event.attending}/{event.participants.length}
           </span>
@@ -169,23 +202,36 @@ function EventCard({
   );
 }
 
-function AddEventSheet({
+/**
+ * One sheet for adding and for editing.
+ *
+ * Editing exists because plans move: a departure slips an hour, a hotel
+ * changes, a leg gets cancelled. Organisers only — the same rule the API
+ * enforces with RequireManage.
+ */
+function EventSheet({
   tripId,
   timezone,
+  event,
   onClose,
-  onCreated,
+  onDone,
 }: {
   tripId: string;
   timezone: string;
+  event?: TripEvent;
   onClose: () => void;
-  onCreated: () => void;
+  onDone: () => void;
 }) {
-  const [type, setType] = useState<EventType>("departure");
+  const editing = event !== undefined;
+  const [type, setType] = useState<EventType>(event?.type ?? "departure");
   // Pre-filled from the type selected by default, and it follows every change
-  // until the field is edited.
-  const title = useSuggestedName(EVENT_TYPE_NAMES.departure ?? "");
-  const [when, setWhen] = useState(defaultWhen());
-  const [location, setLocation] = useState("");
+  // until the field is edited. An event being edited already has its name.
+  const title = useSuggestedName(event?.title ?? EVENT_TYPE_NAMES.departure ?? "");
+  // Wall clock in the trip's timezone, both ways — never the device's.
+  const [when, setWhen] = useState(
+    event ? toLocalInput(event.start_at, timezone) : dayAheadIn(timezone, 1, 9),
+  );
+  const [location, setLocation] = useState(event?.location_name ?? "");
   const [error, setError] = useState<ApiError | undefined>();
 
   const chooseType = (next: EventType) => {
@@ -195,15 +241,29 @@ function AddEventSheet({
 
   const submit = async () => {
     setError(undefined);
+    const body = {
+      title: title.value,
+      type,
+      start_at: fromLocalInput(when, timezone),
+      location_name: location,
+    };
     try {
-      await api.events.create(tripId, {
-        title: title.value,
-        type,
-        // The picker gives a local wall-clock time; the API takes an instant.
-        start_at: new Date(when).toISOString(),
-        location_name: location,
-      });
-      onCreated();
+      if (event) await api.events.update(tripId, event.id, body);
+      else await api.events.create(tripId, body);
+      onDone();
+    } catch (err) {
+      if (err instanceof ApiError) setError(err);
+      else throw err;
+    }
+  };
+
+  const remove = async () => {
+    if (!event) return;
+    if (!(await confirm(`Remove "${event.title}" from the timeline?`))) return;
+    setError(undefined);
+    try {
+      await api.events.remove(tripId, event.id);
+      onDone();
     } catch (err) {
       if (err instanceof ApiError) setError(err);
       else throw err;
@@ -211,7 +271,7 @@ function AddEventSheet({
   };
 
   return (
-    <Sheet title="Add to timeline" onClose={onClose}>
+    <Sheet title={editing ? "Edit event" : "Add to timeline"} onClose={onClose}>
       {/* The kind comes first: picking it names the event, so the field below
           is usually already right. */}
       <Field label="Kind">
@@ -237,21 +297,23 @@ function AddEventSheet({
         <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Piotrkowska 1" />
       </Field>
       {error && !Object.keys(error.fields).length && <span className="field-error">{error.message}</span>}
-      <p className="tiny">Everyone on the trip is added, undecided, and can answer for themselves.</p>
+      {editing ? (
+        <p className="tiny">
+          Everyone keeps the answer they already gave. Moving the time re-notifies the group.
+        </p>
+      ) : (
+        <p className="tiny">Everyone on the trip is added, undecided, and can answer for themselves.</p>
+      )}
       <AsyncButton block onClick={submit} disabled={title.value.trim().length < 2}>
-        Add event
+        {editing ? "Save changes" : "Add event"}
       </AsyncButton>
+      {editing && (
+        <AsyncButton block variant="danger" onClick={remove}>
+          Remove from timeline
+        </AsyncButton>
+      )}
     </Sheet>
   );
-}
-
-/** Tomorrow at 09:00, formatted for datetime-local. */
-function defaultWhen(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  d.setHours(9, 0, 0, 0);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export type { Member };

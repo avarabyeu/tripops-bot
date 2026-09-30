@@ -387,6 +387,17 @@ as though it were 12:09 UTC — which moved every deadline by the client's offse
 and made the reminder windows miss the decisions they were meant to catch.
 `TestInstantsAreStoredInUTC` guards it.
 
+The same trap exists one layer out, in the other direction.
+`<input type="datetime-local">` has no timezone at all: its value is a
+wall-clock string, and `new Date(value)` reads it as the *device's* local time.
+The timeline form did exactly that under a label reading "When (Europe/Warsaw)",
+so an organiser whose phone was in a different zone from the trip shifted every
+event they touched — invisibly, because the form then redisplayed the shifted
+time as if it were right. `format.ts` converts both ways through the trip's
+zone instead (`toLocalInput` / `fromLocalInput`), and picks deliberately on the
+two days a year when a wall clock is not one instant: the earlier of a repeated
+hour, and the moment after a skipped one.
+
 ## No CSS framework in the Mini App
 
 Telegram supplies the palette through CSS variables and changes them with the

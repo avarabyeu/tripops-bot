@@ -357,6 +357,25 @@ select:focus {
   font-size: 11px;
 }
 
+/* A button that reads as the text it sits in. Used where the tap target has
+   to be the label itself, because the card around it already does something
+   else — the timeline card carries the RSVP chips. */
+
+.linklike {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.linklike:active {
+  opacity: 0.6;
+}
+
 /* -------------------------------------------------------------- progress -- */
 
 .progress {

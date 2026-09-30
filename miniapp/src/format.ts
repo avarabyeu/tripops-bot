@@ -52,6 +52,88 @@ export function dayIn(iso: string, timezone: string): string {
   });
 }
 
+/**
+ * The wall-clock parts of an instant in a given timezone.
+ *
+ * `en-CA` because it formats as YYYY-MM-DD, which is the one locale output
+ * worth parsing; everything else here goes through `Intl` for display only.
+ */
+function partsIn(date: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
+  // hourCycle h23 can render midnight as 24; Date.UTC normalises it anyway.
+  return { y: get("year"), m: get("month"), d: get("day"), hh: get("hour"), mm: get("minute"), ss: get("second") };
+}
+
+/** How far ahead of UTC the zone is at that instant, in milliseconds. */
+function offsetAt(date: Date, timezone: string): number {
+  const p = partsIn(date, timezone);
+  return Date.UTC(p.y, p.m - 1, p.d, p.hh, p.mm, p.ss) - date.getTime();
+}
+
+/**
+ * An instant, as the `datetime-local` value a person in the trip's timezone
+ * would read off a clock.
+ *
+ * `<input type="datetime-local">` has no timezone: it is a wall-clock string,
+ * and the browser's own zone is irrelevant to it. Using `new Date(value)` on
+ * the way back in — which is what this screen used to do — silently reads it
+ * as the *device's* local time, so an organiser in Warsaw editing a trip kept
+ * in UTC moved every event by an hour just by opening the form.
+ */
+export function toLocalInput(iso: string, timezone: string): string {
+  const p = partsIn(new Date(iso), timezone);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${p.y}-${pad(p.m)}-${pad(p.d)}T${pad(p.hh)}:${pad(p.mm)}`;
+}
+
+/**
+ * The inverse: a wall clock in the trip's timezone, as an ISO instant.
+ *
+ * Twice a year a wall clock is not one instant. On the autumn change 02:30
+ * happens twice, and this returns the **first** — the same choice `Temporal`
+ * makes, and the one that matches "the earlier of the two 02:30s". On the
+ * spring change 02:30 never happens at all, and this returns the instant just
+ * after the gap rather than refusing an event somebody is trying to schedule.
+ */
+export function fromLocalInput(value: string, timezone: string): string {
+  const wall = Date.parse(`${value}:00Z`);
+  const day = 86_400_000;
+  // The offsets a day either side bracket any transition, so one of these two
+  // candidates is right whenever the wall clock exists at all.
+  const before = wall - offsetAt(new Date(wall - day), timezone);
+  const after = wall - offsetAt(new Date(wall + day), timezone);
+
+  // Earliest first, so a wall clock that happens twice resolves to the first.
+  for (const candidate of [Math.min(before, after), Math.max(before, after)]) {
+    const iso = new Date(candidate).toISOString();
+    if (Date.parse(`${toLocalInput(iso, timezone)}:00Z`) === wall) return iso;
+  }
+  // The clock skipped this time. Land after the gap.
+  return new Date(Math.max(before, after)).toISOString();
+}
+
+/**
+ * A `datetime-local` value some days ahead at a given hour, read in the trip's
+ * timezone — the default a form offers before anybody types.
+ */
+export function dayAheadIn(timezone: string, days: number, hour: number): string {
+  const today = toLocalInput(new Date().toISOString(), timezone).slice(0, 10);
+  const target = new Date(`${today}T00:00:00Z`);
+  target.setUTCDate(target.getUTCDate() + days);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${target.toISOString().slice(0, 10)}T${pad(hour)}:00`;
+}
+
 export function dateTimeIn(iso: string, timezone: string): string {
   return `${dayIn(iso, timezone)} · ${timeIn(iso, timezone)}`;
 }
