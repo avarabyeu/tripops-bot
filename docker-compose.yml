@@ -36,6 +36,14 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-UTC}
       DEFAULT_CURRENCY: ${DEFAULT_CURRENCY:-EUR}
+      # Tunables. The defaults here match the ones in internal/config, so the
+      # behaviour is unchanged — but without these lines, setting any of them
+      # in an env file does nothing at all, silently, which is worse than not
+      # offering the knob.
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      TELEGRAM_INITDATA_TTL: ${TELEGRAM_INITDATA_TTL:-24h}
+      SCHEDULER_INTERVAL: ${SCHEDULER_INTERVAL:-1m}
+      NOTIFY_INTERVAL: ${NOTIFY_INTERVAL:-15s}
       DEV_USER_TELEGRAM_ID: ${DEV_USER_TELEGRAM_ID:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
