@@ -36,7 +36,11 @@ tasks:
       - npm run build
 
   preview:
-    desc: Serve the production build locally
+    # The bundle only, with no API behind it: half the screens will error.
+    # To see the real thing, build it and run the binary — `task app:build &&
+    # task run` — which serves the app and the API from one process on :8080,
+    # exactly as production does.
+    desc: Serve the built bundle alone on :4173 (no API)
     deps: [build]
     cmds:
       - npm run preview

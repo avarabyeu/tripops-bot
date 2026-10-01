@@ -67,7 +67,7 @@ tasks:
       - ./{{.BINARY}} serve
 
   dev:
-    desc: Run the backend and the Mini App dev server together
+    desc: Run the backend and the Vite dev server together (:8080 and :5173)
     deps: [run, app:dev]
 
   # -------------------------------------------------------------------- test --
@@ -197,7 +197,7 @@ tasks:
   # ------------------------------------------------------------------ docker --
 
   docker:up:
-    desc: Start the default stack (backend on SQLite + Mini App)
+    desc: Start the default stack — one container, SQLite in a named volume
     cmds:
       - docker compose up --build -d
       - docker compose ps

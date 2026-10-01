@@ -86,11 +86,20 @@ task run              # backend against local SQLite (no Docker needed)
 task test             # full suite: unit + integration, on SQLite
 task check            # format check, lint, vet, tests, build — run before finishing
 task fmt              # gofumpt + import grouping, via golangci-lint
-task app:dev          # Mini App dev server on :5173
+task app:dev          # Mini App dev server on :5173, /api proxied to :8080
+task app:build        # bundle into internal/webapp/dist, which the binary embeds
 task migrate:status   # schema version and pending migrations
 task migrate:new -- add_trip_notes    # scaffold a migration pair
-task docker:up        # PostgreSQL + backend + Mini App
+task docker:up        # one container, SQLite in a named volume
+task docker:pg:up     # the same image against PostgreSQL
 ```
+
+**The Mini App is compiled into the binary.** `internal/webapp` embeds the
+Vite output and the router serves it from its NotFound handler, so there is
+one container, one origin and no proxy. `task run` on its own serves whatever
+bundle was last built — run `task app:build` first, or use `task app:dev` and
+work on :5173. A binary with no bundle still runs: the API and bot work, and
+the app's route says which command was missed.
 
 Run `task test` against PostgreSQL too before changing anything in a
 repository: `task test:integration`.

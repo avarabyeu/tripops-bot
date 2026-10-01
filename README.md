@@ -172,8 +172,8 @@ random and the trip id never appears in chat history.
 ## Mini App
 
 ```bash
-task app:dev        # Vite dev server, /api proxied to the backend
-task app:build      # production bundle into miniapp/dist
+task app:dev        # Vite dev server on :5173, /api proxied to the backend
+task app:build      # bundle into internal/webapp/dist, which the binary embeds
 task app:typecheck
 ```
 
@@ -181,8 +181,16 @@ React 19, TypeScript, no CSS framework — Telegram supplies the palette through
 CSS variables, so the app styles itself from those and follows the user's
 theme. Mobile-first, one column, every section with a real empty state.
 
-Serve `miniapp/dist` from any static host over HTTPS (Telegram requires it) and
-set that URL as `MINIAPP_URL`.
+**There is no static host to deploy to.** `task app:build` writes into
+`internal/webapp/dist` and `go:embed` compiles it into the binary, so the
+process that serves the API serves the app from the same origin.
+`MINIAPP_URL` is just the public URL of that process — the one Telegram opens
+and the one you set in @BotFather.
+
+In development you use the Vite dev server instead, which proxies `/api` to
+the backend on :8080. A binary built without running `task app:build` still
+runs: the API and the bot work, the startup log says no bundle is embedded,
+and the app's route explains which command was missed.
 
 ---
 
