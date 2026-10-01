@@ -276,7 +276,13 @@ tasks:
     cmds:
       # No --build: the image is built on a developer machine and loaded in
       # by `task deploy:ship`.
-      - "{{.DEPLOY}} up -d"
+      #
+      # --remove-orphans because a container compose no longer declares keeps
+      # running otherwise, and keeps its Traefik labels with it. That is not
+      # hypothetical: dropping the nginx container left a `miniapp` that still
+      # claimed the same router, so the proxy could go on serving a stale
+      # bundle from a service nothing in the repository mentions any more.
+      - "{{.DEPLOY}} up -d --remove-orphans"
       - "{{.DEPLOY}} ps"
 
   deploy:down:
